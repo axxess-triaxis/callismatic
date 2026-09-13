@@ -1,20 +1,31 @@
 # Callismatic
 
-**A personal secretary and phone secretary agent** — it screens and handles the calls you'd
-otherwise never know about, and manages the notes, to-dos, calendar, and reminders that come
-out of them.
+**A personal and phone secretary AI agent.** It listens to the voicemails you'd never check,
+decides what needs you, quietly handles or blocks the rest — then carries that same judgment
+into your to-dos, calendar, CRM, and messaging.
 
 Callismatic is part of **AXXESS TRIaxis**, an Enterprise SaaS and Organizational OS platform
 built by **Triaxis Ventures Private Limited**, founded by **Mr. Sudipta Koushik Sarmah** and
 **Ms. Ritashree Mahanta**. This repo is cloned and integrated into AXXESS TRIaxis's public
 repository at [github.com/axxess-triaxis/AXXESSTRIAXIS](https://github.com/axxess-triaxis/AXXESSTRIAXIS).
 
-Built on the [Strands Agents SDK](https://strandsagents.com/) (Amazon Bedrock) for the
-[Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) — **Professional Agents**
-track — with real integrations to [AssemblyAI](https://www.assemblyai.com/) (voicemail
-transcription) and [CALL-E](https://heycall-e.com/) (automatic callbacks), submitted
-separately to their respective hackathons as well. See
-[docs/SUBMISSION.md](docs/SUBMISSION.md) for the per-hackathon breakdown.
+Built on the [Strands Agents SDK](https://strandsagents.com/) running on **Amazon Bedrock**
+and **Amazon Nova**, for the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/)
+— **Professional Agents** track — with real integrations across the rest of the stack: real
+transcription via [AssemblyAI](https://www.assemblyai.com/), real outbound callbacks via
+[CALL-E](https://heycall-e.com/), meeting notes, a synced Google Sheets CRM, Google Calendar
+availability/booking, a Twilio-backed SMS/verify number, and a WhatsApp Business
+receiver/sender — all on the same triage pipeline. Submitted separately to each hackathon's
+respective track; see [docs/SUBMISSION.md](docs/SUBMISSION.md) for the per-hackathon
+breakdown. A lightweight, credential-free demo of the triage output is also live on
+[Hugging Face Spaces](https://huggingface.co/spaces/SKS1213/callismatic).
+
+**Roadmap — AMD + Kubernetes**: a Kubernetes-orchestrated fine-tuning pipeline on AMD GPU
+infrastructure is planned to train a proprietary, sandboxed model on Callismatic's own
+accumulated triage decisions and human corrections — turning the "Personal Secretary & Phone
+Manager" algorithm from a prompted agent into a purpose-trained, horizontally scalable one.
+Design is written up in [docs/AMD_ACT3_ARCHITECTURE.md](docs/AMD_ACT3_ARCHITECTURE.md); as of
+this writing no AMD compute has been provisioned and no training has run.
 
 **Live deployment**: a dashboard + WhatsApp webhook + scoped JSON API (`web.py`) is deployed
 to AWS Lambda at https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/ — see
