@@ -18,6 +18,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from callismatic import reminders, todos
 from callismatic.agent import build_agent
 from callismatic.corrections import record_correction
 from callismatic.digest_report import generate_weekly_digest, send_digest
@@ -196,6 +197,56 @@ def _run_digest(argv: list[str]) -> None:
     send_digest(text, channel=args.channel)
 
 
+def _run_todos(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="callismatic todos", description="List or complete to-do items.")
+    subparsers = parser.add_subparsers(dest="action")
+
+    subparsers.add_parser("list", help="List open to-dos (default)")
+    complete_parser = subparsers.add_parser("complete", help="Mark a to-do item done")
+    complete_parser.add_argument("item_id")
+
+    args = parser.parse_args(argv)
+
+    if args.action == "complete":
+        if todos.complete_todo(args.item_id):
+            print(f"Completed {args.item_id}")
+        else:
+            print(f"No open to-do found with id {args.item_id}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    items = todos.list_todos()
+    if not items:
+        print("No open to-dos.")
+        return
+    for item in items:
+        print(f"[{item['id']}] {item['text']}  (from {item['source']})")
+
+
+def _run_reminders(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="callismatic reminders", description="Add a reminder, or send every reminder that's now due."
+    )
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    add_parser = subparsers.add_parser("add", help="Schedule a reminder")
+    add_parser.add_argument("text")
+    add_parser.add_argument("--due", required=True, help="ISO 8601 timestamp, e.g. 2026-09-15T14:00:00+00:00")
+    add_parser.add_argument("--to", help="WhatsApp number to deliver it to (E.164); omit to only print when due")
+
+    subparsers.add_parser("send", help="Send every reminder that's now due")
+
+    args = parser.parse_args(argv)
+
+    if args.action == "add":
+        item = reminders.add_reminder(args.text, args.due, to=args.to)
+        print(f"Scheduled {item['id']}: \"{item['text']}\" due {item['due_at']}")
+        return
+
+    sent = reminders.send_due_reminders()
+    print(f"Sent {len(sent)} due reminder(s)." if sent else "No reminders due.")
+
+
 def main() -> None:
     load_dotenv()
     argv = sys.argv[1:]
@@ -203,6 +254,10 @@ def main() -> None:
         _run_correct(argv[1:])
     elif argv and argv[0] == "digest":
         _run_digest(argv[1:])
+    elif argv and argv[0] == "todos":
+        _run_todos(argv[1:])
+    elif argv and argv[0] == "reminders":
+        _run_reminders(argv[1:])
     else:
         _run_triage(argv)
 

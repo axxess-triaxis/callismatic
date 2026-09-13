@@ -156,6 +156,42 @@ tested module, not a stub.
   recommended for callback, N still need your decision" over the last N days. Delivery is
   `stdout`/`file` today (no credential needed); a WhatsApp/SMS/email channel is a small
   addition once one is chosen, not a redesign.
+- **Concurrent sub-agent orchestration** (`triage_inbox_concurrent` in `triage.py`,
+  `callismatic --concurrent`) — triages every voicemail at once instead of one at a time, each
+  with its own freshly spawned `build_agent()` instance (Strands agents don't support safely
+  reusing one instance across concurrent calls — `ConcurrentInvocationMode.THROW` is the
+  default and raises `ConcurrencyException` on reentry — so a fresh sub-agent per task is the
+  actual mechanism, not a metaphor). Bounded by `--max-concurrency` (default 5). Measured
+  against the same 5 real sample voicemails, real AWS Nova + real AssemblyAI: **87.2s
+  sequential vs. 18.7s concurrent, a 4.7x speedup** — an actual timed run, not a projection.
+  Finding and fixing this surfaced a real bug: the digest/blocklist/to-do JSON files are
+  read-modify-write, and two sub-agents finishing at the same instant could corrupt one —
+  now guarded by a `threading.Lock` per file (`tools.py`, `todos.py`, `corrections.py`).
+- **AI note-taker** (`meeting_notes.py`) — summarizes a completed CALL-E call's own
+  `transcript_turns` into structured notes (summary, key points, action items, whether a human
+  should review it) using the same Bedrock model already configured for triage — no new
+  credentials, and no separate note-taking product, since a call transcript already flows
+  through this pipeline. Deliberately raises rather than fabricates notes for a call with no
+  real transcript (e.g. `NO_ANSWER`).
+- **To-do list, with optional Todoist sync** (`todos.py`, `todoist_sync.py`,
+  `callismatic todos`) — every `needs_decision=true` triage result already has a
+  `suggested_action`; this makes that explicit, persisted, and completable instead of living
+  only in one run's terminal output. Todoist sync is opt-in and best-effort via a plain
+  personal API token (`TODOIST_API_TOKEN`) — unlike Google Tasks, Todoist has no OAuth
+  requirement for your own account, which is why it was chosen over Tasks.
+- **Google Calendar — availability + booking** (`calendar_sync.py`, `scheduling.py`) — reuses
+  the exact same service account as Google Sheets (Calendar, like Sheets, supports sharing one
+  specific resource with a service account's email; Google Tasks has no such sharing model,
+  which is the same reason it was skipped above). `find_free_slots`/`book_meeting` read and
+  write real calendar events; `scheduling.propose_slots_text` turns availability into the kind
+  of natural-language offer a CALL-E `callback_task` can hand to a caller ("Tuesday Sep 15 at
+  2:00 PM, Wednesday Sep 16 at 10:00 AM"), and `book_chosen_slot` turns whichever one the
+  caller picks into a real event.
+- **Reminders, delivered via WhatsApp** (`reminders.py`, `callismatic reminders`) — a local
+  store of due-dated reminders; `callismatic reminders send` (meant to run periodically, like
+  `digest`) delivers every reminder that's now due through the same WhatsApp send path already
+  verified live (`whatsapp_webhook.send_whatsapp_message`), falling back to `stdout` if
+  WhatsApp isn't configured or delivery fails, so a reminder is never silently lost.
 
 ## Why not a real Truecaller integration
 

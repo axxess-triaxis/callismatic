@@ -15,12 +15,15 @@ dependencies = [
     "pydantic>=2.0.0",
     "phonenumbers>=8.13.0",
     "twilio>=9.0.0",
+    "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]
 demo = ["pyttsx3>=2.90"]
-crm = ["google-api-python-client>=2.100.0", "google-auth>=2.20.0"]
-whatsapp = ["fastapi>=0.110.0", "uvicorn>=0.27.0", "httpx>=0.27.0"]
+# Also covers calendar_sync.py -- Google Sheets and Google Calendar share the same
+# service-account auth pattern and the same client libraries.
+google = ["google-api-python-client>=2.100.0", "google-auth>=2.20.0"]
+whatsapp = ["fastapi>=0.110.0", "uvicorn>=0.27.0"]
 
 [project.scripts]
 callismatic = "callismatic.cli:main"

@@ -31,6 +31,7 @@ from strands import Agent
 from callismatic.agent import build_agent
 from callismatic.call_router import route_call
 from callismatic.schema import CallTriage
+from callismatic.todos import add_todo_from_triage
 from callismatic.tools import block_number, record_decision
 from callismatic.voicemails import transcribe_voicemail
 
@@ -129,6 +130,9 @@ def _decide_and_act(
     record_decision(source_name, triage.model_dump())
     _sync_to_crm_if_configured(source_name, caller_number, triage)
 
+    if triage.needs_decision and triage.suggested_action:
+        add_todo_from_triage(source_name, triage.suggested_action)
+
     if triage.block_recommended:
         block_number(caller_number, triage.decision_reason or triage.summary)
 
@@ -209,6 +213,9 @@ async def _decide_and_act_async(
 
     await asyncio.to_thread(record_decision, source_name, triage.model_dump())
     await asyncio.to_thread(_sync_to_crm_if_configured, source_name, caller_number, triage)
+
+    if triage.needs_decision and triage.suggested_action:
+        await asyncio.to_thread(add_todo_from_triage, source_name, triage.suggested_action)
 
     if triage.block_recommended:
         await asyncio.to_thread(block_number, caller_number, triage.decision_reason or triage.summary)
