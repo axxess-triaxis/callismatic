@@ -113,6 +113,41 @@ Tests cover the schema, the scam-script heuristic, the blocklist, and
 transcription error-handling with a mocked AssemblyAI client — no live
 AWS/AssemblyAI/CALL-E credentials needed to run them.
 
+## Beyond the demo pipeline: opt-in extensions already built
+
+Everything below is off by default -- unset credentials, unchanged behavior. Each is a real,
+tested module, not a stub.
+
+- **Correction feedback loop** (`corrections.py`, `check_corrections` tool) — `callismatic
+  correct unblock <phone_number>` or `callismatic correct recategorize <file_name> --category
+  ...` records a human override; the agent checks `check_corrections` before every decision
+  and treats a match as ground truth, so a past misjudgment for that caller isn't repeated.
+- **Carrier/community spam-signal layer** (`carrier_intel.py`, `check_carrier_intel` tool) — a
+  second, independent signal (line type/carrier via Twilio Lookup) alongside the transcript
+  heuristic, never replacing it. Needs `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`; absent, it
+  reports "unavailable" and the transcript heuristic still works alone.
+- **Emerging-markets call routing** (`call_router.py`) — a per-country provider registry
+  (`PROVIDERS_BY_COUNTRY_CODE`) that `route_call` checks before falling back to CALL-E.
+  CALL-E's own docs list many countries, India included, as "International" tier — routed
+  through CALL-E's international numbers, which real testing in this project showed can get
+  silently filtered by local carriers before the phone ever rings. This module is the
+  extension point for a regional SIP/VoIP partner, not a partner integration itself — that
+  needs an actual contract, which no code change can substitute for.
+- **Multi-channel intake** (`triage_text_message` in `triage.py`) — the same schema, agent,
+  and block/callback/record actions, fed an SMS/WhatsApp message body instead of a voicemail
+  transcript (no transcription step needed for text). Actually receiving live messages needs
+  its own webhook server and provider credentials (Twilio SMS or Meta's WhatsApp Business
+  Cloud API) — out of scope here; this is the pipeline side, ready for whatever receives them.
+- **Google Sheets CRM sync** (`crm_sheets.py`) — appends every triaged result as a row,
+  strictly opt-in and best-effort: a sync failure is logged, never raised, so a CRM outage
+  can't break triage. Needs `GOOGLE_SERVICE_ACCOUNT_FILE` (a service account key) and
+  `GOOGLE_SHEET_ID`, with the sheet shared to that service account's own email.
+- **Weekly trust digest** (`digest_report.py`, `callismatic digest`) — since the whole design
+  is the agent acting quietly on your behalf, this is the audit trail: "N blocked, N
+  recommended for callback, N still need your decision" over the last N days. Delivery is
+  `stdout`/`file` today (no credential needed); a WhatsApp/SMS/email channel is a small
+  addition once one is chosen, not a redesign.
+
 ## Why not a real Truecaller integration
 
 Truecaller has no public developer API for reverse number lookup or call

@@ -1,9 +1,11 @@
-"""Entrypoint: `callismatic run [inbox_dir]`.
+"""Entrypoint: `callismatic [inbox_dir]` to triage voicemails,
+`callismatic correct ...` to record a human correction to a past decision, or
+`callismatic digest` to print a summary of what the agent has done recently.
 
-Prints nothing for voicemails that need no action, and a clear, actionable
-card for every one that does -- plus a line for every callback actually
-placed and every number blocked. The point of the whole project is that
-this output should be short.
+The triage report prints nothing for voicemails that need no action, and a
+clear, actionable card for every one that does -- plus a line for every
+callback actually placed and every number blocked. The point of the whole
+project is that this output should be short.
 """
 
 from __future__ import annotations
@@ -15,6 +17,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from callismatic.agent import build_agent
+from callismatic.corrections import record_correction
+from callismatic.digest_report import generate_weekly_digest, send_digest
+from callismatic.tools import find_digest_entry, unblock_number
 from callismatic.triage import triage_inbox
 
 URGENCY_MARKERS = {"none": "", "low": "[low]", "medium": "[MEDIUM]", "high": "[HIGH]"}
@@ -76,8 +81,65 @@ def _print_report(results):
         print("\nFiled silently (no action needed): " + ", ".join(r.file_name for r in filed))
 
 
-def main() -> None:
-    load_dotenv()
+def _run_correct(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="callismatic correct",
+        description="Record a human correction to a past triage decision, so the agent stops repeating the same misjudgment for that caller.",
+    )
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    unblock_parser = subparsers.add_parser("unblock", help="Remove a number from the blocklist -- it isn't actually scam/spam.")
+    unblock_parser.add_argument("phone_number")
+    unblock_parser.add_argument("--reason", default="Manually unblocked -- not actually scam/spam.")
+
+    recat_parser = subparsers.add_parser("recategorize", help="Correct a past voicemail's classification.")
+    recat_parser.add_argument("file_name", help="The voicemail file name as it appears in outputs/digest.json")
+    recat_parser.add_argument("--category", choices=["scam", "spam", "lead", "important", "routine"])
+    recat_parser.add_argument("--needs-decision", choices=["true", "false"])
+    recat_parser.add_argument("--callback-recommended", choices=["true", "false"])
+    recat_parser.add_argument("--block-recommended", choices=["true", "false"])
+    recat_parser.add_argument("--reason", default="Manually recategorized.")
+
+    args = parser.parse_args(argv)
+
+    if args.action == "unblock":
+        removed = unblock_number(args.phone_number)
+        record_correction(
+            target=args.phone_number,
+            original={"block_recommended": True},
+            corrected={"block_recommended": False},
+            reason=args.reason,
+        )
+        note = "was on the blocklist" if removed else "was not on the blocklist -- correction recorded anyway"
+        print(f"Unblocked {args.phone_number} ({note}).")
+        return
+
+    entry = find_digest_entry(args.file_name)
+    if entry is None:
+        print(f"No past decision found for {args.file_name} in outputs/digest.json", file=sys.stderr)
+        sys.exit(1)
+
+    corrected: dict[str, object] = {}
+    if args.category:
+        corrected["category"] = args.category
+    if args.needs_decision:
+        corrected["needs_decision"] = args.needs_decision == "true"
+    if args.callback_recommended:
+        corrected["callback_recommended"] = args.callback_recommended == "true"
+    if args.block_recommended:
+        corrected["block_recommended"] = args.block_recommended == "true"
+    if not corrected:
+        print(
+            "Provide at least one of --category/--needs-decision/--callback-recommended/--block-recommended",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    record_correction(target=args.file_name, original=entry["triage"], corrected=corrected, reason=args.reason)
+    print(f"Recorded correction for {args.file_name}: {corrected}")
+
+
+def _run_triage(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("inbox", nargs="?", default="sample_voicemails", help="Folder of voicemail recordings to triage")
     parser.add_argument(
@@ -85,7 +147,7 @@ def main() -> None:
         action="store_true",
         help="Decide callbacks but don't actually place them via CALL-E (dry run, saves free-call quota)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     inbox_dir = Path(args.inbox)
     if not inbox_dir.is_dir():
@@ -95,6 +157,30 @@ def main() -> None:
     agent = build_agent()
     results = triage_inbox(agent, inbox_dir, place_callbacks=not args.no_callbacks)
     _print_report(results)
+
+
+def _run_digest(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="callismatic digest",
+        description="Print a summary of what the agent has done recently -- blocked, called back, needed your attention, filed silently.",
+    )
+    parser.add_argument("--days", type=int, default=7, help="How many days back to summarize (default: 7)")
+    parser.add_argument("--channel", choices=["stdout", "file"], default="stdout")
+    args = parser.parse_args(argv)
+
+    text = generate_weekly_digest(days=args.days)
+    send_digest(text, channel=args.channel)
+
+
+def main() -> None:
+    load_dotenv()
+    argv = sys.argv[1:]
+    if argv and argv[0] == "correct":
+        _run_correct(argv[1:])
+    elif argv and argv[0] == "digest":
+        _run_digest(argv[1:])
+    else:
+        _run_triage(argv)
 
 
 if __name__ == "__main__":

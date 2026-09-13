@@ -22,7 +22,7 @@ import json
 from dotenv import load_dotenv
 
 from callismatic.agent import build_agent
-from callismatic.callback import place_callback
+from callismatic.call_router import route_call
 from callismatic.schema import CallTriage
 from callismatic.voicemails import transcribe_voicemail
 
@@ -54,8 +54,8 @@ def main() -> None:
         print("\nAgent did not recommend a callback for this voicemail -- not placing a call.")
         return
 
-    print(f"\nPlacing real CALL-E call to {args.to}...")
-    result = place_callback(triage.callback_task, args.to)
+    print(f"\nPlacing real callback to {args.to} via the routed provider...")
+    result = route_call(triage.callback_task, args.to)
     print(json.dumps(result, indent=2))
 
 
