@@ -17,6 +17,7 @@ those messages to call.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import sys
@@ -27,10 +28,13 @@ from typing import Literal
 
 from strands import Agent
 
+from callismatic.agent import build_agent
 from callismatic.call_router import route_call
 from callismatic.schema import CallTriage
 from callismatic.tools import block_number, record_decision
 from callismatic.voicemails import transcribe_voicemail
+
+DEFAULT_MAX_CONCURRENCY = 5
 
 SUPPORTED_SUFFIXES = {".wav", ".mp3", ".m4a", ".flac"}
 _PHONE_RE = re.compile(r"(\+\d{8,15})")
@@ -131,6 +135,87 @@ def _decide_and_act(
     callback_result = None
     if triage.callback_recommended and triage.callback_task and place_callbacks and caller_number != "unknown":
         callback_result = route_call(triage.callback_task, caller_number)
+
+    return TriageResult(
+        file_name=source_name,
+        caller_number=caller_number,
+        triage=triage,
+        callback_result=callback_result,
+    )
+
+
+async def triage_inbox_concurrent(
+    inbox_dir: Path,
+    *,
+    place_callbacks: bool = True,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+) -> list[TriageResult]:
+    """Triages every voicemail in inbox_dir concurrently -- one freshly spawned sub-agent per
+    voicemail, run via Strands' async invocation, instead of triage_inbox's sequential
+    one-agent-call-at-a-time loop.
+
+    Strands agents don't support safely reusing one instance across concurrent calls --
+    ConcurrentInvocationMode.THROW (the default) raises ConcurrencyException if you try. So
+    "spawn a sub-agent" here is literal, not a figure of speech: each concurrent task gets its
+    own build_agent() instance, not a shared one.
+
+    Concurrency is bounded by `max_concurrency` (a semaphore) so a large inbox doesn't fire
+    unbounded simultaneous Bedrock/AssemblyAI/CALL-E requests and trip a rate limit. Blocking
+    calls (transcription, the digest/blocklist writes, the CRM sync, the CALL-E call itself --
+    which can take up to 10 minutes per call.wait_for_result's own default timeout) are pushed
+    onto worker threads via asyncio.to_thread so one slow callback never stalls the other
+    sub-agents' progress.
+    """
+    paths = [p for p in sorted(inbox_dir.iterdir()) if p.suffix.lower() in SUPPORTED_SUFFIXES]
+    semaphore = asyncio.Semaphore(max_concurrency)
+    tasks = [_triage_one_async(path, place_callbacks=place_callbacks, semaphore=semaphore) for path in paths]
+    return await asyncio.gather(*tasks)
+
+
+async def _triage_one_async(path: Path, *, place_callbacks: bool, semaphore: asyncio.Semaphore) -> TriageResult:
+    caller_number = caller_number_from_filename(path)
+    async with semaphore:
+        try:
+            transcript = await asyncio.to_thread(transcribe_voicemail, path)
+        except RuntimeError as e:
+            return TriageResult(file_name=path.name, caller_number=caller_number, triage=None, error=str(e))  # type: ignore[arg-type]
+
+        agent = build_agent()  # this voicemail's own sub-agent -- never shared with another concurrent task
+        return await _decide_and_act_async(
+            agent,
+            source_name=path.name,
+            caller_number=caller_number,
+            transcript=transcript,
+            intake_label="voicemail",
+            place_callbacks=place_callbacks,
+        )
+
+
+async def _decide_and_act_async(
+    agent: Agent,
+    *,
+    source_name: str,
+    caller_number: str,
+    transcript: str,
+    intake_label: str,
+    place_callbacks: bool,
+) -> TriageResult:
+    prompt = (
+        f"Triage this {intake_label}.\n\nSource: {source_name}\nCaller number: {caller_number}\n\n"
+        f"Transcript:\n{transcript}"
+    )
+    response = await agent.invoke_async(prompt, structured_output_model=CallTriage)
+    triage: CallTriage = response.structured_output
+
+    await asyncio.to_thread(record_decision, source_name, triage.model_dump())
+    await asyncio.to_thread(_sync_to_crm_if_configured, source_name, caller_number, triage)
+
+    if triage.block_recommended:
+        await asyncio.to_thread(block_number, caller_number, triage.decision_reason or triage.summary)
+
+    callback_result = None
+    if triage.callback_recommended and triage.callback_task and place_callbacks and caller_number != "unknown":
+        callback_result = await asyncio.to_thread(route_call, triage.callback_task, caller_number)
 
     return TriageResult(
         file_name=source_name,

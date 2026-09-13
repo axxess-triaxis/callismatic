@@ -1,8 +1,9 @@
+import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from callismatic.schema import CallTriage
-from callismatic.triage import caller_number_from_filename, triage_text_message
+from callismatic.triage import caller_number_from_filename, triage_inbox_concurrent, triage_text_message
 
 
 def test_extracts_phone_number_from_filename():
@@ -80,3 +81,75 @@ def test_crm_sync_failure_does_not_break_triage(tmp_path, monkeypatch, capsys):
 
     assert result.error is None
     assert "CRM sync" in capsys.readouterr().err
+
+
+def test_triage_inbox_concurrent_spawns_one_fresh_agent_per_voicemail(tmp_path, monkeypatch):
+    monkeypatch.setattr("callismatic.tools.DIGEST_PATH", tmp_path / "digest.json")
+    monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
+
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a_+15550001111.wav").write_bytes(b"fake")
+    (inbox / "b_+15550002222.wav").write_bytes(b"fake")
+
+    monkeypatch.setattr("callismatic.triage.transcribe_voicemail", lambda path: f"transcript for {path.name}")
+
+    built_agents = []
+
+    def fake_build_agent():
+        fake_agent = MagicMock()
+        fake_response = MagicMock()
+        fake_response.structured_output = CallTriage(category="routine", summary="ok", needs_decision=False)
+        fake_agent.invoke_async = AsyncMock(return_value=fake_response)
+        built_agents.append(fake_agent)
+        return fake_agent
+
+    monkeypatch.setattr("callismatic.triage.build_agent", fake_build_agent)
+
+    results = asyncio.run(triage_inbox_concurrent(inbox, place_callbacks=False))
+
+    assert len(results) == 2
+    assert len(built_agents) == 2, "each voicemail must get its own sub-agent, never a shared one"
+    assert {r.file_name for r in results} == {"a_+15550001111.wav", "b_+15550002222.wav"}
+    for fake_agent in built_agents:
+        fake_agent.invoke_async.assert_awaited_once()
+
+
+def test_triage_inbox_concurrent_respects_max_concurrency(tmp_path, monkeypatch):
+    monkeypatch.setattr("callismatic.tools.DIGEST_PATH", tmp_path / "digest.json")
+    monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
+
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    for i in range(6):
+        (inbox / f"v{i}_+1555000000{i}.wav").write_bytes(b"fake")
+
+    monkeypatch.setattr("callismatic.triage.transcribe_voicemail", lambda path: "transcript")
+
+    in_flight = 0
+    peak = 0
+    lock = asyncio.Lock()
+
+    async def fake_invoke_async(prompt, structured_output_model=None):
+        nonlocal in_flight, peak
+        async with lock:
+            in_flight += 1
+            peak = max(peak, in_flight)
+        await asyncio.sleep(0.05)
+        async with lock:
+            in_flight -= 1
+        response = MagicMock()
+        response.structured_output = CallTriage(category="routine", summary="ok", needs_decision=False)
+        return response
+
+    def fake_build_agent():
+        fake_agent = MagicMock()
+        fake_agent.invoke_async = fake_invoke_async
+        return fake_agent
+
+    monkeypatch.setattr("callismatic.triage.build_agent", fake_build_agent)
+
+    results = asyncio.run(triage_inbox_concurrent(inbox, place_callbacks=False, max_concurrency=2))
+
+    assert len(results) == 6
+    assert peak <= 2, f"expected at most 2 sub-agents in flight at once, saw {peak}"
