@@ -30,6 +30,34 @@ def test_successful_lookup_reports_line_type(monkeypatch):
     assert "Example VOIP Co" in report
 
 
+def test_embedded_error_code_is_reported_distinctly(monkeypatch):
+    """Twilio can return HTTP 200 with an error_code embedded inside
+    line_type_intelligence itself (e.g. 60627 for a trial-account quota
+    limit) -- confirmed against the real API this session. This must be
+    reported as a diagnosable Twilio-side condition, not silently shown as
+    an empty/unknown line type."""
+    monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "test_token")
+
+    fake_lookup = MagicMock()
+    fake_lookup.line_type_intelligence = {
+        "carrier_name": None,
+        "error_code": 60627,
+        "mobile_country_code": None,
+        "mobile_network_code": None,
+        "type": None,
+    }
+
+    fake_client = MagicMock()
+    fake_client.lookups.v2.phone_numbers.return_value.fetch.return_value = fake_lookup
+
+    with patch("twilio.rest.Client", return_value=fake_client):
+        report = check_carrier_intel("+918402999963")
+
+    assert "60627" in report
+    assert "unavailable" in report.lower()
+
+
 def test_lookup_failure_is_reported_not_raised(monkeypatch):
     monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC_test")
     monkeypatch.setenv("TWILIO_AUTH_TOKEN", "test_token")
