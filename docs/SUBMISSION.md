@@ -73,12 +73,15 @@ not a mocked demo, an actual dial attempt with a provider-confirmed call ID.
 
 ### What's next
 
-Already built as opt-in extensions, pending credentials to go fully live: a Twilio
-Lookup-based carrier-intelligence signal, a per-country call-routing registry for emerging
-markets, SMS/WhatsApp intake sharing the same triage pipeline, a Google Sheets CRM sync, and a
-periodic trust digest (`callismatic digest`) summarizing what the agent blocked, called back, or
-surfaced. Beyond those: real inbound telephony (Twilio recording webhooks) instead of a local
-sample folder, and a folder-watcher/background-service mode instead of a batch run.
+Since this draft: a hosted dashboard + API deployed live on AWS Lambda, a Google Sheets CRM
+sync verified against a real spreadsheet, Google Calendar availability/booking verified
+against a real calendar, and a WhatsApp receiver/sender verified directly against Meta's
+Cloud API — though Meta actually auto-forwarding real incoming messages to it still needs
+Business Verification (a separate identity/document review process), not yet done. A Twilio
+Lookup carrier-intelligence signal is wired and tested but currently blocked by Twilio's own
+trial-account quota. Still ahead: real inbound telephony (Twilio recording webhooks) instead
+of a local sample folder, and a folder-watcher/background-service mode instead of a batch
+run.
 
 ### Track
 
