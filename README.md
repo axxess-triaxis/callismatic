@@ -11,6 +11,12 @@ for the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) —
 to their respective hackathons as well. See [docs/SUBMISSION.md](docs/SUBMISSION.md)
 for the per-hackathon breakdown.
 
+**Live deployment**: a dashboard + WhatsApp webhook + scoped JSON API
+(`web.py`) is deployed to AWS Lambda at
+https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/ —
+see [Deployment](#deployment) below for how, and what it does and doesn't
+expose publicly.
+
 ## The problem
 
 Scam and spam calls get bad enough that people and small businesses resort to
@@ -212,6 +218,38 @@ weigh — never a fabricated "Truecaller lookup."
 - No folder-watching daemon — this is a batch run, not a background service.
 - The scam-script check is a content heuristic, not a carrier-verified
   signal — see above.
+
+## Deployment
+
+`web.py` is the single deployable app, running live on AWS Lambda behind a public
+Function URL: https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/
+
+- **Public, read-only**: `/` (dashboard), `/api/digest`, `/api/todos`, `/api/blocklist`.
+- **Public, Meta's own auth**: `/webhook` (WhatsApp — verify-token challenge on GET, HMAC
+  signature check on POST).
+- **Auth-gated** (`X-API-Key` header): completing a to-do, adding/sending reminders,
+  recording a correction, and `/api/triage/text` — which defaults to
+  `place_callbacks=false` so a stray authenticated request still can't spend real CALL-E
+  quota without an explicit opt-in.
+- **Deliberately not exposed**: a public "upload a voicemail" endpoint — real, unfinished
+  scope, not an oversight.
+
+Secrets are in AWS Secrets Manager (`callismatic/prod`), not plaintext Lambda environment
+variables — `lambda_handler.py` fetches them once at cold start into `os.environ`, so every
+existing module keeps reading `os.environ` exactly as it already does. `paths.py` makes the
+local JSON stores' directory overridable via `CALLISMATIC_DATA_DIR` (default `outputs`,
+unchanged for local CLI use) since Lambda's deployment directory is read-only — `/tmp` is
+the only writable path at runtime, which is where the Lambda handler points it.
+
+To redeploy after a code change:
+
+```bash
+docker build --provenance=false --sbom=false -t callismatic:latest .   # Lambda rejects OCI attestation manifests
+docker tag callismatic:latest 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:latest
+docker push 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:latest
+aws lambda update-function-code --function-name callismatic \
+  --image-uri 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:latest --profile axxess-triaxis
+```
 
 ## License
 
