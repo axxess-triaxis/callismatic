@@ -118,7 +118,17 @@ def send_whatsapp_message(to: str, body: str) -> JsonObject:
         },
         timeout=30.0,
     )
-    response.raise_for_status()
+    if response.status_code >= 400:
+        # Meta's error body is genuinely diagnosable (e.g. code 131030 "Recipient phone
+        # number not in allowed list" for an unverified test number) -- raise_for_status()
+        # alone discards it and leaves only a generic "400 Bad Request", confirmed against
+        # the real API this session.
+        try:
+            detail = response.json().get("error", {})
+            message = f"{detail.get('message', response.text)} (code {detail.get('code', 'unknown')})"
+        except ValueError:
+            message = response.text
+        raise RuntimeError(f"WhatsApp send failed: {message}")
     return response.json()
 
 
