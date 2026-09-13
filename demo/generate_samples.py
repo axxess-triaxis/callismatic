@@ -6,7 +6,7 @@ still transcribes these with real AssemblyAI -- nothing about the
 transcription step is simulated, only the input audio is.
 
 Each filename embeds a fake E.164 phone number (see
-deskwork.triage.caller_number_from_filename) so the demo can exercise
+callismatic.triage.caller_number_from_filename) so the demo can exercise
 caller-number-driven behavior -- blocking, callback -- without a live phone
 line. Run: `python demo/generate_samples.py`
 """
@@ -43,6 +43,12 @@ SCRIPTS = {
         "legal flagged a couple of clauses around the liability cap that we need to discuss "
         "before we can sign. Can you give me a call back today or tomorrow? It's fairly time "
         "sensitive since we're hoping to close this out by end of week."
+    ),
+    "package_delivery_+15550005555.wav": (
+        "Hi, this is Sarah from Metro Package Delivery. We attempted to deliver your package "
+        "today but no one was available to sign for it. Please call us back to let us know if "
+        "it's okay to leave it at the door next time, or if you'd like us to try again tomorrow "
+        "between nine and noon."
     ),
 }
 

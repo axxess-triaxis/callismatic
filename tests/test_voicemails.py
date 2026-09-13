@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import assemblyai as aai
 import pytest
 
-from deskwork import voicemails
+from callismatic import voicemails
 
 
 def test_missing_api_key_raises(monkeypatch):
@@ -23,7 +23,7 @@ def test_transcribe_returns_text(monkeypatch, tmp_path):
     fake_transcript.status = aai.TranscriptStatus.completed
     fake_transcript.text = "Hello, this is a test voicemail."
 
-    with patch("deskwork.voicemails.aai.Transcriber") as mock_transcriber_cls:
+    with patch("callismatic.voicemails.aai.Transcriber") as mock_transcriber_cls:
         mock_transcriber_cls.return_value.transcribe.return_value = fake_transcript
         text = voicemails.transcribe_voicemail(audio)
 
@@ -40,7 +40,7 @@ def test_transcription_error_raises(monkeypatch, tmp_path):
     fake_transcript.status = aai.TranscriptStatus.error
     fake_transcript.error = "unsupported format"
 
-    with patch("deskwork.voicemails.aai.Transcriber") as mock_transcriber_cls:
+    with patch("callismatic.voicemails.aai.Transcriber") as mock_transcriber_cls:
         mock_transcriber_cls.return_value.transcribe.return_value = fake_transcript
         with pytest.raises(RuntimeError, match="unsupported format"):
             voicemails.transcribe_voicemail(audio)

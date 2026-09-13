@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from strands import Agent
 
-from deskwork.models import get_model
-from deskwork.tools import check_number_intel, check_past_decisions, get_today
+from callismatic.models import get_model
+from callismatic.tools import check_number_intel, check_past_decisions, get_today
 
-SYSTEM_PROMPT = """You are Deskwork Agent, a call-screening assistant for someone who had to \
+SYSTEM_PROMPT = """You are Callismatic, a call-screening assistant for someone who had to \
 block all unknown numbers because of constant scam and spam calls -- and, as a side effect, now \
 misses real clients, leads, deliveries, interviews, and doctors' offices too, because those are \
 unknown numbers until someone actually listens to the voicemail.

@@ -1,5 +1,5 @@
 [project]
-name = "deskwork-agent"
+name = "callismatic"
 version = "0.2.0"
 description = "An autonomous call-triage agent that only interrupts you when a real decision is needed -- and quietly auto-handles or blocks the rest."
 readme = "README.md"
@@ -19,7 +19,7 @@ dependencies = [
 demo = ["pyttsx3>=2.90"]
 
 [project.scripts]
-deskwork = "deskwork.cli:main"
+callismatic = "callismatic.cli:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]

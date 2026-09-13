@@ -1,4 +1,4 @@
-"""Entrypoint: `deskwork run [inbox_dir]`.
+"""Entrypoint: `callismatic run [inbox_dir]`.
 
 Prints nothing for voicemails that need no action, and a clear, actionable
 card for every one that does -- plus a line for every callback actually
@@ -14,8 +14,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from deskwork.agent import build_agent
-from deskwork.triage import triage_inbox
+from callismatic.agent import build_agent
+from callismatic.triage import triage_inbox
 
 URGENCY_MARKERS = {"none": "", "low": "[low]", "medium": "[MEDIUM]", "high": "[HIGH]"}
 
@@ -23,17 +23,19 @@ URGENCY_MARKERS = {"none": "", "low": "[low]", "medium": "[MEDIUM]", "high": "[H
 def _print_report(results):
     ok = [r for r in results if r.error is None]
     needs_action = [r for r in ok if r.triage.needs_decision]
-    callbacks = [r for r in ok if r.callback_result is not None]
+    callback_decided = [r for r in ok if r.triage.callback_recommended]
+    callback_placed = [r for r in callback_decided if r.callback_result is not None]
     blocked = [r for r in ok if r.triage.block_recommended]
     filed = [
         r for r in ok
-        if not r.triage.needs_decision and not r.triage.block_recommended and r.callback_result is None
+        if not r.triage.needs_decision and not r.triage.block_recommended and not r.triage.callback_recommended
     ]
     errors = [r for r in results if r.error is not None]
 
     print(
         f"Triaged {len(results)} voicemail(s): "
-        f"{len(needs_action)} need your decision, {len(callbacks)} auto-handled via callback, "
+        f"{len(needs_action)} need your decision, {len(callback_decided)} recommended for callback "
+        f"({len(callback_placed)} actually placed via CALL-E), "
         f"{len(blocked)} blocked, {len(filed)} filed silently, {len(errors)} unreadable.\n"
     )
 
@@ -48,14 +50,17 @@ def _print_report(results):
             print(f"  Why: {r.triage.decision_reason}")
             print(f"  Suggested action: {r.triage.suggested_action}")
 
-    if callbacks:
+    if callback_decided:
         print("\n" + "=" * 60)
-        print("AUTO-HANDLED VIA CALLBACK")
+        print("CALLBACK RECOMMENDED")
         print("=" * 60)
-        for r in callbacks:
+        for r in callback_decided:
             print(f"\n{r.file_name} (caller: {r.caller_number})")
             print(f"  Task: {r.triage.callback_task}")
-            print(f"  Result: {r.callback_result.get('status', 'unknown')}")
+            if r.callback_result is not None:
+                print(f"  Result: placed via CALL-E -- status {r.callback_result.get('status', 'unknown')}")
+            else:
+                print("  Result: NOT placed (dry run / --no-callbacks, or unknown caller number)")
 
     if blocked:
         print("\nBlocked: " + ", ".join(f"{r.caller_number} ({r.file_name})" for r in blocked))

@@ -16,7 +16,7 @@ voicemail inbox with several unheard messages.
 Voiceover: "Scam calls get bad enough that people just block every unknown
 number. That also blocks the client, the delivery driver, the interviewer,
 the doctor's office — because those are unknown numbers too, until someone
-actually listens to the voicemail. Most people never do. Deskwork Agent
+actually listens to the voicemail. Most people never do. Callismatic
 does, for you."
 
 ### 2. What it is (0:30–1:00)
@@ -31,7 +31,7 @@ to you."
 
 ### 3. Live run (1:00–3:00) — the core of the demo
 
-Screen: terminal, `deskwork sample_voicemails` running live, full output
+Screen: terminal, `callismatic sample_voicemails` running live, full output
 visible.
 
 Narrate over it as it runs:

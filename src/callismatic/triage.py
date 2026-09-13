@@ -12,10 +12,10 @@ from pathlib import Path
 
 from strands import Agent
 
-from deskwork.callback import place_callback
-from deskwork.schema import CallTriage
-from deskwork.tools import block_number, record_decision
-from deskwork.voicemails import transcribe_voicemail
+from callismatic.callback import place_callback
+from callismatic.schema import CallTriage
+from callismatic.tools import block_number, record_decision
+from callismatic.voicemails import transcribe_voicemail
 
 SUPPORTED_SUFFIXES = {".wav", ".mp3", ".m4a", ".flac"}
 _PHONE_RE = re.compile(r"(\+\d{8,15})")

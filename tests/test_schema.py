@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from deskwork.schema import CallTriage
+from callismatic.schema import CallTriage
 
 
 def test_minimal_valid_triage():

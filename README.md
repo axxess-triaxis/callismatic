@@ -1,4 +1,4 @@
-# Deskwork Agent
+# Callismatic
 
 An agent that listens to the voicemails you'd never otherwise check, decides
 what actually needs you, and quietly handles or blocks the rest.
@@ -25,7 +25,7 @@ checks.
 Point it at a folder of voicemail recordings. For each one, it:
 
 1. **Transcribes it** — real [AssemblyAI](https://www.assemblyai.com/) speech-to-text,
-   not a canned transcript (`src/deskwork/voicemails.py`).
+   not a canned transcript (`src/callismatic/voicemails.py`).
 2. **Reasons about it** with tools available mid-thought: `get_today` (to judge
    how stale a callback request has become), `check_past_decisions` (so a
    caller already handled in a prior run isn't re-flagged), and
@@ -33,7 +33,7 @@ Point it at a folder of voicemail recordings. For each one, it:
    Truecaller or carrier-database lookup (no public API for that exists; see
    [Why not Truecaller](#why-not-a-real-truecaller-integration) below).
 3. **Decides** — via Strands' structured-output mode, forced into one schema
-   (`src/deskwork/schema.py`): caller category (scam / spam / lead / important
+   (`src/callismatic/schema.py`): caller category (scam / spam / lead / important
    / routine), a plain-language summary, the concrete facts worth
    remembering, whether a human needs to decide anything, whether it's safe
    to auto-handle with a callback, and whether the number should be blocked.
@@ -41,7 +41,7 @@ Point it at a folder of voicemail recordings. For each one, it:
    same pattern as logging the decision): blocks the number if it's a
    confirmed scam/spam, places a real callback via
    [CALL-E](https://heycall-e.com/) if the request is simple and automatable
-   (`src/deskwork/callback.py`), or surfaces it to the human with full
+   (`src/callismatic/callback.py`), or surfaces it to the human with full
    context if it genuinely needs a decision. Everything is logged to
    `outputs/digest.json`.
 
@@ -84,13 +84,13 @@ This project calls Amazon Bedrock, AssemblyAI, and CALL-E, so it needs:
 ## Running it
 
 ```bash
-deskwork sample_voicemails
+callismatic sample_voicemails
 ```
 
 or, without installing the console script:
 
 ```bash
-python -m deskwork.cli sample_voicemails
+python -m callismatic.cli sample_voicemails
 ```
 
 `sample_voicemails/` ships four synthetic voicemails, generated with an
@@ -128,7 +128,7 @@ weigh — never a fabricated "Truecaller lookup."
 - No live phone line — voicemails come from a local folder, not a real
   inbound number. A real deployment would wire this to Twilio's recording
   webhooks; the caller number instead comes from the sample file's name
-  (`caller_number_from_filename` in `src/deskwork/triage.py`).
+  (`caller_number_from_filename` in `src/callismatic/triage.py`).
 - No folder-watching daemon — this is a batch run, not a background service.
 - The scam-script check is a content heuristic, not a carrier-verified
   signal — see above.

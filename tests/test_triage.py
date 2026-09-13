@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from deskwork.triage import caller_number_from_filename
+from callismatic.triage import caller_number_from_filename
 
 
 def test_extracts_phone_number_from_filename():

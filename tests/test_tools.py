@@ -1,6 +1,6 @@
 import json
 
-from deskwork.tools import block_number, check_number_intel
+from callismatic.tools import block_number, check_number_intel
 
 
 def test_check_number_intel_flags_gift_card_scam():
@@ -24,7 +24,7 @@ def test_check_number_intel_clean_transcript():
 
 def test_block_number_persists_entry(tmp_path, monkeypatch):
     blocklist_path = tmp_path / "blocklist.json"
-    monkeypatch.setattr("deskwork.tools.BLOCKLIST_PATH", blocklist_path)
+    monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", blocklist_path)
 
     block_number("+15550001111", "Gift-card scam script detected.")
 

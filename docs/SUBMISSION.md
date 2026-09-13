@@ -1,4 +1,4 @@
-# Devpost/lablab.ai submission text — Deskwork Agent
+# Devpost/lablab.ai submission text — Callismatic
 
 Draft for the project description fields. Trim/adjust once the live
 Bedrock + AssemblyAI + CALL-E run is confirmed and real numbers (run time,
@@ -18,7 +18,7 @@ for you and only speaks up — or calls back — when it actually matters.
 
 ## What it does
 
-Deskwork Agent triages a folder of voicemail recordings one at a time. For
+Callismatic triages a folder of voicemail recordings one at a time. For
 each one it:
 
 - Transcribes it with real AssemblyAI speech-to-text.
@@ -73,10 +73,10 @@ calls for them.
 - **Agents for Humans**: the submission above, in full — repo, README,
   architecture diagram, MIT license, demo video.
 - **Call-E**: a standalone extraction of the callback piece
-  (`src/deskwork/callback.py`), submitted as a PR to
+  (`src/callismatic/callback.py`), submitted as a PR to
   `CALLE-AI/awesome-phone-call-agents` following their contribution
   template, with its own short demo video showing a real call placed.
 - **AssemblyAI Voice Agent Hackathon**: the voicemail-transcription piece
-  (`src/deskwork/voicemails.py`) as the genuinely necessary voice-intelligence
+  (`src/callismatic/voicemails.py`) as the genuinely necessary voice-intelligence
   layer feeding the whole pipeline — check the actual lablab.ai submission
   form for exact requirements before finalizing this entry.
