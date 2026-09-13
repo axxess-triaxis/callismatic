@@ -22,7 +22,10 @@ or calls back — when it actually matters.
 
 ### What it does
 
-Callismatic triages a folder of voicemail recordings one at a time. For each one it:
+Callismatic is a **personal and phone secretary AI agent** — not just a filter. It triages a
+folder of voicemail recordings (or an incoming SMS/WhatsApp message) one at a time, then
+carries that same judgment into the follow-up work a human assistant would normally do. For
+each message it:
 
 - Transcribes it with real AssemblyAI speech-to-text.
 - Reasons about it with tools: `get_today` (to judge staleness), `check_past_decisions` (so a
@@ -35,13 +38,19 @@ Callismatic triages a folder of voicemail recordings one at a time. For each one
   calling agent), and whether the number should be blocked.
 - Acts on that decision deterministically: blocks confirmed scam/spam numbers, places a real
   callback via CALL-E for simple/automatable requests, or surfaces genuinely important calls to
-  the human with full context.
+  the human with full context — then turns the outcome into meeting notes, a to-do, a synced
+  Google Sheets CRM row, and Google Calendar availability/booking, with reminders delivered
+  back over WhatsApp.
 
 ### How we built it
 
-Python, the Strands Agents SDK for the agent loop and tool-calling, Amazon Bedrock as the model
-provider, AssemblyAI for voicemail transcription, the CALL-E SDK for placing real outbound
-callbacks, and Pydantic for the structured-output schema Strands enforces on every response.
+Python, the Strands Agents SDK for the agent loop and tool-calling, running on **Amazon
+Bedrock and Amazon Nova** as model providers, AssemblyAI for voicemail transcription, the
+CALL-E SDK for placing real outbound callbacks, and Pydantic for the structured-output schema
+Strands enforces on every response. Around that core: a Google Sheets CRM sync and Google
+Calendar availability/booking (both via a shared service-account credential), a Twilio-backed
+SMS/verify number for a second, independent carrier-intelligence signal, and a WhatsApp
+Business Cloud API receiver/sender running the same triage pipeline on incoming messages.
 
 ### Challenges we ran into
 
@@ -73,15 +82,27 @@ not a mocked demo, an actual dial attempt with a provider-confirmed call ID.
 
 ### What's next
 
-Since this draft: a hosted dashboard + API deployed live on AWS Lambda, a Google Sheets CRM
-sync verified against a real spreadsheet, Google Calendar availability/booking verified
-against a real calendar, and a WhatsApp receiver/sender verified directly against Meta's
-Cloud API — though Meta actually auto-forwarding real incoming messages to it still needs
-Business Verification (a separate identity/document review process), not yet done. A Twilio
-Lookup carrier-intelligence signal is wired and tested but currently blocked by Twilio's own
+Since this draft: a hosted dashboard + API deployed live on AWS Lambda
+([awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws](https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/)),
+a credential-free demo of real triage output on [Hugging Face
+Spaces](https://huggingface.co/spaces/SKS1213/callismatic), a Google Sheets CRM sync verified
+against a real spreadsheet, Google Calendar availability/booking verified against a real
+calendar, and a WhatsApp receiver/sender verified directly against Meta's Cloud API — though
+Meta actually auto-forwarding real incoming messages to it still needs Business Verification
+(a separate identity/document review process), not yet done. A Twilio Lookup
+carrier-intelligence signal is wired and tested but currently blocked by Twilio's own
 trial-account quota. Still ahead: real inbound telephony (Twilio recording webhooks) instead
-of a local sample folder, and a folder-watcher/background-service mode instead of a batch
-run.
+of a local sample folder, and a folder-watcher/background-service mode instead of a batch run.
+
+### Roadmap: AMD + Kubernetes
+
+A Kubernetes-orchestrated fine-tuning pipeline on AMD GPU infrastructure is planned next, to
+train a proprietary, sandboxed model on Callismatic's own accumulated triage decisions and
+human corrections — turning the Personal Secretary & Phone Manager algorithm from a prompted
+agent into a purpose-trained, horizontally scalable one. Design is written up in
+[`docs/AMD_ACT3_ARCHITECTURE.md`](AMD_ACT3_ARCHITECTURE.md) and targets the separate AMD
+Developer Hackathon: ACT III submission below; as of this writing no AMD compute has been
+provisioned and no training has run.
 
 ### Track
 
@@ -91,7 +112,9 @@ small-business owner without staff to screen calls for them.
 
 ### Built With
 
-python, strands-agents, amazon-bedrock, amazon-nova, assemblyai, calle, pydantic, boto3
+python, strands-agents, amazon-bedrock, amazon-nova, assemblyai, calle, pydantic, boto3,
+google-sheets-api, google-calendar-api, twilio, whatsapp-business-cloud-api, aws-lambda,
+docker, gradio, huggingface-spaces
 
 ---
 
@@ -118,11 +141,12 @@ python, strands-agents, amazon-bedrock, amazon-nova, assemblyai, calle, pydantic
 Confirmed directly from the actual submission page (lablab.ai/event/assemblyai-voice-agent-hackathon):
 
 - **Project title**: Callismatic
-- **Short description** (one line): An agent that listens to the voicemails you'd never check,
-  decides what needs you, and quietly handles or blocks the rest — built on AssemblyAI,
-  Strands/Bedrock, and CALL-E.
+- **Short description** (one line): A personal and phone secretary AI agent that listens to
+  the voicemails you'd never check, decides what needs you, and quietly handles or blocks the
+  rest — built on AssemblyAI, Strands/Bedrock/Nova, and CALL-E.
 - **Long description**: reuse the Inspiration + What it does sections above.
-- **Technology & category tags**: AssemblyAI, Amazon Bedrock, Strands Agents SDK, CALL-E, Python
+- **Technology & category tags**: AssemblyAI, Amazon Bedrock, Amazon Nova, Strands Agents SDK,
+  CALL-E, Google Sheets, Google Calendar, Twilio, WhatsApp Business, Python
 - **Cover image**: [needs a static image — a screenshot of a triage run or the architecture
   diagram rendered as PNG]
 - **Video presentation**: same demo video as Agents for Humans, or a trimmed cut
@@ -133,7 +157,10 @@ Confirmed directly from the actual submission page (lablab.ai/event/assemblyai-v
   Lambda deployment (`web.py`), not a static page: a dashboard over real digest/blocklist/
   to-do data, plus a JSON API. Verified end-to-end after deployment — a real scam-script
   message posted to its `/api/triage/text` endpoint was correctly classified and blocked by
-  a live Bedrock call running under the Lambda's own IAM role.
+  a live Bedrock call running under the Lambda's own IAM role. A second, credential-free demo
+  of the same real triage output is also live on [Hugging Face
+  Spaces](https://huggingface.co/spaces/SKS1213/callismatic) for judges who'd rather not need
+  an API key to look.
 
 ---
 
