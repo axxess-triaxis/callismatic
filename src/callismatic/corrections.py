@@ -16,11 +16,17 @@ agent, not the agent acting on its own.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 CORRECTIONS_PATH = Path("outputs/corrections.json")
+
+# Not currently called from any concurrent path (only the single-threaded CLI `correct`
+# command), but guarded for the same reason as tools._digest_lock/todos._todos_lock: cheap
+# insurance against a future concurrent caller reintroducing the same read-modify-write race.
+_corrections_lock = threading.Lock()
 
 
 def record_correction(target: str, original: dict[str, Any], corrected: dict[str, Any], reason: str) -> None:
@@ -30,18 +36,19 @@ def record_correction(target: str, original: dict[str, Any], corrected: dict[str
     name (for a recategorization) -- whatever check_corrections should later
     search for.
     """
-    CORRECTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    entries = json.loads(CORRECTIONS_PATH.read_text(encoding="utf-8")) if CORRECTIONS_PATH.exists() else []
-    entries.append(
-        {
-            "target": target,
-            "original": original,
-            "corrected": corrected,
-            "reason": reason,
-            "corrected_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    CORRECTIONS_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    with _corrections_lock:
+        CORRECTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        entries = json.loads(CORRECTIONS_PATH.read_text(encoding="utf-8")) if CORRECTIONS_PATH.exists() else []
+        entries.append(
+            {
+                "target": target,
+                "original": original,
+                "corrected": corrected,
+                "reason": reason,
+                "corrected_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        CORRECTIONS_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
 
 
 def find_corrections(keyword: str) -> list[dict[str, Any]]:

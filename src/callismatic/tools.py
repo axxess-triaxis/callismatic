@@ -17,6 +17,7 @@ reasoning. This mirrors the confirm-before-critical-action pattern.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,18 @@ from callismatic.corrections import find_corrections
 
 DIGEST_PATH = Path("outputs/digest.json")
 BLOCKLIST_PATH = Path("outputs/blocklist.json")
+
+# Guards the read-modify-write on each file below. Needed because
+# triage_inbox_concurrent (triage.py) runs multiple sub-agents' record_decision/
+# block_number calls on separate worker threads via asyncio.to_thread -- without
+# this, two sub-agents finishing at the same instant can both read the same
+# pre-append file contents, then each write back a version missing the other's
+# entry (or, if the writes themselves interleave, corrupt the file into invalid
+# JSON entirely). A real occurrence of exactly that, not a hypothetical: this was
+# found by test_triage_inbox_concurrent_spawns_one_fresh_agent_per_voicemail
+# intermittently failing with JSONDecodeError before this lock was added.
+_digest_lock = threading.Lock()
+_blocklist_lock = threading.Lock()
 
 _SCAM_MARKERS: dict[str, list[str]] = {
     "gift-card payment request": ["gift card", "itunes card", "google play card", "steam card"],
@@ -169,12 +182,13 @@ def unblock_number(phone_number: str) -> bool:
     (see corrections.py / `callismatic correct unblock`), never something
     the agent decides to undo on its own.
     """
-    if not BLOCKLIST_PATH.exists():
-        return False
-    entries = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8"))
-    remaining = [e for e in entries if e["phone_number"] != phone_number]
-    removed = len(remaining) != len(entries)
-    BLOCKLIST_PATH.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+    with _blocklist_lock:
+        if not BLOCKLIST_PATH.exists():
+            return False
+        entries = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8"))
+        remaining = [e for e in entries if e["phone_number"] != phone_number]
+        removed = len(remaining) != len(entries)
+        BLOCKLIST_PATH.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
     return removed
 
 
@@ -185,16 +199,17 @@ def record_decision(file_name: str, triage: dict) -> None:
     returns its structured output, so the log always reflects exactly what
     was decided, never something the model could omit or alter mid-reasoning.
     """
-    DIGEST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    entries = json.loads(DIGEST_PATH.read_text(encoding="utf-8")) if DIGEST_PATH.exists() else []
-    entries.append(
-        {
-            "file": file_name,
-            "triaged_at": datetime.now(timezone.utc).isoformat(),
-            "triage": triage,
-        }
-    )
-    DIGEST_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    with _digest_lock:
+        DIGEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        entries = json.loads(DIGEST_PATH.read_text(encoding="utf-8")) if DIGEST_PATH.exists() else []
+        entries.append(
+            {
+                "file": file_name,
+                "triaged_at": datetime.now(timezone.utc).isoformat(),
+                "triage": triage,
+            }
+        )
+        DIGEST_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
 
 
 def block_number(phone_number: str, reason: str) -> None:
@@ -205,13 +220,14 @@ def block_number(phone_number: str, reason: str) -> None:
     once, deterministically, after the agent has already decided
     block_recommended=true.
     """
-    BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    entries = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8")) if BLOCKLIST_PATH.exists() else []
-    entries.append(
-        {
-            "phone_number": phone_number,
-            "reason": reason,
-            "blocked_at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    BLOCKLIST_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    with _blocklist_lock:
+        BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+        entries = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8")) if BLOCKLIST_PATH.exists() else []
+        entries.append(
+            {
+                "phone_number": phone_number,
+                "reason": reason,
+                "blocked_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        BLOCKLIST_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
