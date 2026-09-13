@@ -19,15 +19,15 @@ from __future__ import annotations
 import json
 import threading
 from datetime import date, datetime, timezone
-from pathlib import Path
 
 from strands import tool
 
 from callismatic.carrier_intel import check_carrier_intel as _check_carrier_intel
 from callismatic.corrections import find_corrections
+from callismatic.paths import DATA_DIR
 
-DIGEST_PATH = Path("outputs/digest.json")
-BLOCKLIST_PATH = Path("outputs/blocklist.json")
+DIGEST_PATH = DATA_DIR / "digest.json"
+BLOCKLIST_PATH = DATA_DIR / "blocklist.json"
 
 # Guards the read-modify-write on each file below. Needed because
 # triage_inbox_concurrent (triage.py) runs multiple sub-agents' record_decision/

@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-REMINDERS_PATH = Path("outputs/reminders.json")
+from callismatic.paths import DATA_DIR
+
+REMINDERS_PATH = DATA_DIR / "reminders.json"
 
 JsonObject = dict[str, Any]
 

@@ -18,10 +18,11 @@ from __future__ import annotations
 import json
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-CORRECTIONS_PATH = Path("outputs/corrections.json")
+from callismatic.paths import DATA_DIR
+
+CORRECTIONS_PATH = DATA_DIR / "corrections.json"
 
 # Not currently called from any concurrent path (only the single-threaded CLI `correct`
 # command), but guarded for the same reason as tools._digest_lock/todos._todos_lock: cheap

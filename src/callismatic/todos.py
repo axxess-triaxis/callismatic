@@ -14,10 +14,11 @@ import os
 import sys
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-TODOS_PATH = Path("outputs/todos.json")
+from callismatic.paths import DATA_DIR
+
+TODOS_PATH = DATA_DIR / "todos.json"
 
 JsonObject = dict[str, Any]
 
