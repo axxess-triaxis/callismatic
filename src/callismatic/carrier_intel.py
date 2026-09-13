@@ -39,6 +39,15 @@ def check_carrier_intel(phone_number: str) -> str:
         return f"Carrier intelligence lookup failed: {exc}"
 
     line_type_intel = lookup.line_type_intelligence or {}
+
+    error_code = line_type_intel.get("error_code")
+    if error_code:
+        return (
+            f"Carrier intelligence unavailable (Twilio error {error_code}) -- e.g. 60627 means "
+            "a trial account's Lookup quota has been reached; this is a Twilio account-level "
+            "limit, not a signal about the caller."
+        )
+
     line_type = line_type_intel.get("type", "unknown")
     carrier_name = line_type_intel.get("carrier_name", "unknown")
     return (
