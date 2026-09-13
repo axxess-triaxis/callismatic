@@ -22,6 +22,9 @@ from pathlib import Path
 
 from strands import tool
 
+from callismatic.carrier_intel import check_carrier_intel as _check_carrier_intel
+from callismatic.corrections import find_corrections
+
 DIGEST_PATH = Path("outputs/digest.json")
 BLOCKLIST_PATH = Path("outputs/blocklist.json")
 
@@ -108,6 +111,71 @@ def check_number_intel(transcript_excerpt: str) -> str:
         + ". (Heuristic signal from transcript content only -- no Truecaller or carrier-"
         "database lookup is used, since no public API for that exists.)"
     )
+
+
+@tool
+def check_corrections(keyword: str) -> str:
+    """Searches human corrections to past triage decisions for a keyword (typically the
+    caller's phone number, or a voicemail file name) so a mistake this agent made before
+    -- wrongly blocking a real caller, wrongly staying silent on something that mattered --
+    isn't repeated for the same caller or pattern.
+
+    Args:
+        keyword: a term to search for -- typically the caller's phone number.
+
+    Returns a short text report of matching corrections, or a message saying none were found.
+    Treat any match as ground truth from a human, overriding your own judgment for this caller.
+    """
+    matches = find_corrections(keyword)
+    if not matches:
+        return f"No human corrections mention '{keyword}'."
+    lines = [
+        f"- {m['target']} ({m['corrected_at']}): corrected to {m['corrected']} -- reason: {m['reason']}"
+        for m in matches[-5:]
+    ]
+    return "Matching corrections (treat as ground truth, overriding your own judgment):\n" + "\n".join(lines)
+
+
+@tool
+def check_carrier_intel(phone_number: str) -> str:
+    """Looks up a caller's real line type and carrier (mobile/landline/VOIP) via Twilio
+    Lookup -- a second, independent signal alongside check_number_intel's transcript-content
+    scan. VOIP lines are disproportionately used for scam/robocall traffic, but legitimate
+    small businesses use VOIP too, so this is evidence to weigh, never a verdict on its own.
+
+    Args:
+        phone_number: the caller's phone number in E.164 format.
+
+    Returns a short text report, or a note that carrier intelligence is unavailable if
+    TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN aren't configured -- absence of this signal should
+    never block a decision the transcript heuristic can make on its own.
+    """
+    return _check_carrier_intel(phone_number)
+
+
+def find_digest_entry(file_name: str) -> dict | None:
+    """Returns the most recent digest entry recorded for a given voicemail file name, or None."""
+    if not DIGEST_PATH.exists():
+        return None
+    entries = json.loads(DIGEST_PATH.read_text(encoding="utf-8"))
+    matches = [e for e in entries if e["file"] == file_name]
+    return matches[-1] if matches else None
+
+
+def unblock_number(phone_number: str) -> bool:
+    """Removes every blocklist entry for a phone number. Returns True if anything was removed.
+
+    Not exposed as an @tool -- unblocking is a human correction action
+    (see corrections.py / `callismatic correct unblock`), never something
+    the agent decides to undo on its own.
+    """
+    if not BLOCKLIST_PATH.exists():
+        return False
+    entries = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8"))
+    remaining = [e for e in entries if e["phone_number"] != phone_number]
+    removed = len(remaining) != len(entries)
+    BLOCKLIST_PATH.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+    return removed
 
 
 def record_decision(file_name: str, triage: dict) -> None:

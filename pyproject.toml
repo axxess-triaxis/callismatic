@@ -13,10 +13,13 @@ dependencies = [
     "calle-ai>=0.7.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
+    "phonenumbers>=8.13.0",
+    "twilio>=9.0.0",
 ]
 
 [project.optional-dependencies]
 demo = ["pyttsx3>=2.90"]
+crm = ["google-api-python-client>=2.100.0", "google-auth>=2.20.0"]
 
 [project.scripts]
 callismatic = "callismatic.cli:main"
