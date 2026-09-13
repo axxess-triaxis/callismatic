@@ -1,8 +1,11 @@
 # Devpost/lablab.ai submission text — Callismatic
 
-Ready-to-paste copy for all three hackathon forms. The core Devpost "Story" text (Inspiration
+Ready-to-paste copy for four hackathon forms. The core Devpost "Story" text (Inspiration
 through What's next) is shared between Agents for Humans and Call-E, since both use Devpost's
-standard story format; per-platform sections below cover what differs.
+standard story format; per-platform sections below cover what differs. AMD Developer
+Hackathon: ACT III is a separate, later submission (deadline Oct 18, 2026) built around
+`docs/AMD_ACT3_ARCHITECTURE.md` rather than this shared story, since it targets a different
+piece of the project (the training architecture, not the live triage pipeline).
 
 ---
 
@@ -130,8 +133,41 @@ Confirmed directly from the actual submission page (lablab.ai/event/assemblyai-v
 
 ---
 
+## AMD Developer Hackathon: ACT III (lablab.ai) — separate submission, later deadline
+
+Confirmed from lablab.ai/event/amd-developer-hackathon-act-iii: theme "Build AI agents and
+high-performance AI applications on AMD GPUs in the cloud," online build phase Oct 12–18,
+2026, hybrid on-site optional, prize pool $5,000+, requires an AMD AI Developer Program (ADP)
+account.
+
+This submission is **not** the live triage pipeline (that's already built and running on
+Bedrock/Nova) — it's the proprietary training architecture in
+[`docs/AMD_ACT3_ARCHITECTURE.md`](AMD_ACT3_ARCHITECTURE.md): a Kubernetes-orchestrated LoRA
+fine-tuning pipeline on AMD GPU infrastructure, trained on Callismatic's own accumulated
+triage decisions (`digest.json`) and human corrections (`corrections.json`) — data already
+being collected as a side effect of the correction feedback loop, not something built new for
+this hackathon. As of this writing, **no AMD compute has been provisioned and no training has
+run** — that document is the design ACT III's build window would build a first real slice of.
+
+- **Project title**: Callismatic — Proprietary Triage Model on AMD GPUs
+- **Short description**: A Kubernetes-orchestrated pipeline that fine-tunes a task-specific
+  model on Callismatic's own accumulated call-triage decisions and human corrections, on AMD
+  GPU infrastructure — plugged into the live agent via Strands' native `ModelRouter`/
+  `FallbackStrategy`, with Bedrock/Nova staying as the safety net, not something replaced.
+- **Long description**: reuse `docs/AMD_ACT3_ARCHITECTURE.md` directly — it's already written
+  as a submission-ready design document, not internal notes.
+- **What makes this proprietary, not a wrapper**: the training data itself — real triage
+  decisions plus real human overrides, the exact shape of labeled fine-tuning data, already
+  flowing from features (the correction feedback loop) built for a different reason.
+- **Public GitHub repository**: https://github.com/axxess-triaxis/callismatic
+  (`docs/AMD_ACT3_ARCHITECTURE.md`)
+- **AMD AI Developer Program account**: [founder to create/confirm]
+
+---
+
 ## Founder-only steps (need your login, not something Claude can do)
 
 1. Record the demo video(s) per docs/DEMO_SCRIPT.md.
-2. Create/confirm accounts: AWS Builder ID, CALL-E account, lablab.ai account.
+2. Create/confirm accounts: AWS Builder ID, CALL-E account, lablab.ai account, AMD AI Developer
+   Program account (for ACT III specifically).
 3. Submit each Devpost/lablab.ai form with the text above.
