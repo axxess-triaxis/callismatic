@@ -11,7 +11,9 @@ project is that this output should be short.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,7 +22,7 @@ from callismatic.agent import build_agent
 from callismatic.corrections import record_correction
 from callismatic.digest_report import generate_weekly_digest, send_digest
 from callismatic.tools import find_digest_entry, unblock_number
-from callismatic.triage import triage_inbox
+from callismatic.triage import DEFAULT_MAX_CONCURRENCY, triage_inbox, triage_inbox_concurrent
 
 URGENCY_MARKERS = {"none": "", "low": "[low]", "medium": "[MEDIUM]", "high": "[HIGH]"}
 
@@ -147,6 +149,17 @@ def _run_triage(argv: list[str]) -> None:
         action="store_true",
         help="Decide callbacks but don't actually place them via CALL-E (dry run, saves free-call quota)",
     )
+    parser.add_argument(
+        "--concurrent",
+        action="store_true",
+        help="Triage every voicemail at once, each with its own freshly spawned sub-agent, instead of one at a time",
+    )
+    parser.add_argument(
+        "--max-concurrency",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENCY,
+        help=f"With --concurrent, how many sub-agents may run at once (default: {DEFAULT_MAX_CONCURRENCY})",
+    )
     args = parser.parse_args(argv)
 
     inbox_dir = Path(args.inbox)
@@ -154,9 +167,20 @@ def _run_triage(argv: list[str]) -> None:
         print(f"No such inbox folder: {inbox_dir}", file=sys.stderr)
         sys.exit(1)
 
-    agent = build_agent()
-    results = triage_inbox(agent, inbox_dir, place_callbacks=not args.no_callbacks)
+    started_at = time.monotonic()
+    if args.concurrent:
+        results = asyncio.run(
+            triage_inbox_concurrent(
+                inbox_dir, place_callbacks=not args.no_callbacks, max_concurrency=args.max_concurrency
+            )
+        )
+    else:
+        agent = build_agent()
+        results = triage_inbox(agent, inbox_dir, place_callbacks=not args.no_callbacks)
+    elapsed = time.monotonic() - started_at
+
     _print_report(results)
+    print(f"\n({'concurrent' if args.concurrent else 'sequential'} run, {elapsed:.1f}s)")
 
 
 def _run_digest(argv: list[str]) -> None:
