@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+outputs/*.json
+outputs/*.png
+!outputs/.gitkeep
+*.egg-info/
+.pytest_cache/

@@ -1,0 +1,15 @@
+INVOICE #INV-2231
+
+From: Northwind Office Supplies
+To: Aster & Finch Consulting
+
+Issue date: 2026-07-29
+Due date: 2026-08-28
+
+Description: Quarterly stationery and printer toner restock
+Amount due: $412.50
+
+Payment status: UNPAID
+
+Please remit payment via bank transfer to the account on file. A late fee
+of 1.5% per month applies to balances outstanding beyond 30 days.

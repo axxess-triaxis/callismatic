@@ -1,0 +1,13 @@
+INVOICE #INV-2198 -- PAYMENT RECEIPT
+
+From: Cascade Web Hosting
+To: Aster & Finch Consulting
+
+Issue date: 2026-08-01
+Due date: 2026-08-15
+Amount: $89.00
+
+Payment status: PAID IN FULL on 2026-08-10 via card ending 4471.
+
+Thank you for your business. No further action is required. This receipt
+is for your records.
