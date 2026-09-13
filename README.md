@@ -139,14 +139,19 @@ tested module, not a stub.
   silently filtered by local carriers before the phone ever rings. This module is the
   extension point for a regional SIP/VoIP partner, not a partner integration itself — that
   needs an actual contract, which no code change can substitute for.
-- **Multi-channel intake — WhatsApp is fully live** (`whatsapp_webhook.py`, built on
-  `triage_text_message` in `triage.py`) — a real FastAPI receiver for the WhatsApp Business
-  Cloud API: verifies Meta's webhook challenge, verifies every message's HMAC-SHA256 signature
-  (`X-Hub-Signature-256`) before trusting it, parses incoming text messages, and triages each
-  one through the exact same pipeline as a voicemail — same schema, same agent, same
-  block/callback/record actions, no transcription step needed since the message body already
-  is the text. Verified end-to-end against a live signed request: a real scam-script WhatsApp
-  message was correctly classified and blocked. Run with
+- **Multi-channel intake — WhatsApp receiver/sender code is live and verified; Meta's actual
+  subscription is not** (`whatsapp_webhook.py`, built on `triage_text_message` in
+  `triage.py`) — a real FastAPI receiver for the WhatsApp Business Cloud API: verifies Meta's
+  webhook challenge, verifies every message's HMAC-SHA256 signature (`X-Hub-Signature-256`)
+  before trusting it, parses incoming text messages, and triages each one through the exact
+  same pipeline as a voicemail. Verified two ways directly: a real signed message posted
+  straight to the deployed endpoint was correctly classified and blocked, and a real outbound
+  WhatsApp message was sent and received on a verified test number via the Cloud API. What's
+  **not** confirmed live is Meta automatically calling this webhook on every real incoming
+  message — that needs Meta Business Verification (a separate identity/business document
+  review process), out of scope for now; the webhook UI showed a saved state without that
+  verification, which didn't correspond to an actual subscription (no request ever reached
+  the deployed function in testing). Run with
   `uvicorn callismatic.whatsapp_webhook:app --port 8000`, then point a public HTTPS URL at it
   (a tunnel for testing, real hosting for production) and register that URL in the Meta App
   dashboard. Needs `WHATSAPP_APP_ID`/`WHATSAPP_APP_SECRET`/`WHATSAPP_VERIFY_TOKEN` to receive;
