@@ -4,6 +4,11 @@
 otherwise never know about, and manages the notes, to-dos, calendar, and reminders that come
 out of them.
 
+Callismatic is part of **AXXESS TRIaxis**, an Enterprise SaaS and Organizational OS platform
+built by **Triaxis Ventures Private Limited**, founded by **Mr. Sudipta Koushik Sarmah** and
+**Ms. Ritashree Mahanta**. This repo is cloned and integrated into AXXESS TRIaxis's public
+repository at [github.com/axxess-triaxis/AXXESSTRIAXIS](https://github.com/axxess-triaxis/AXXESSTRIAXIS).
+
 Built on the [Strands Agents SDK](https://strandsagents.com/) (Amazon Bedrock) for the
 [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/) — **Professional Agents**
 track — with real integrations to [AssemblyAI](https://www.assemblyai.com/) (voicemail
