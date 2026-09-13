@@ -125,11 +125,12 @@ Confirmed directly from the actual submission page (lablab.ai/event/assemblyai-v
 - **Video presentation**: same demo video as Agents for Humans, or a trimmed cut
 - **Slide presentation**: [not yet built]
 - **Public GitHub repository**: https://github.com/axxess-triaxis/callismatic
-- **Demo application platform / Application URL**: **gap** — lablab.ai expects a hosted, live
-  demo URL, not just a video. Callismatic is currently a CLI tool with no hosted UI. This
-  hackathon runs through Sep 30, so there's real runway to build a lightweight hosted demo
-  (e.g. a small web dashboard over the digest/blocklist/corrections data) — recommended as a
-  UX/UI-phase task rather than rushing something before the other two deadlines.
+- **Demo application platform / Application URL**: **closed** —
+  https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/ — a real, live AWS
+  Lambda deployment (`web.py`), not a static page: a dashboard over real digest/blocklist/
+  to-do data, plus a JSON API. Verified end-to-end after deployment — a real scam-script
+  message posted to its `/api/triage/text` endpoint was correctly classified and blocked by
+  a live Bedrock call running under the Lambda's own IAM role.
 
 ---
 
