@@ -18,8 +18,10 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
-DIGEST_PATH = Path("outputs/digest.json")
-BLOCKLIST_PATH = Path("outputs/blocklist.json")
+from callismatic.paths import DATA_DIR
+
+DIGEST_PATH = DATA_DIR / "digest.json"
+BLOCKLIST_PATH = DATA_DIR / "blocklist.json"
 
 
 def _load(path: Path) -> list[dict]:
