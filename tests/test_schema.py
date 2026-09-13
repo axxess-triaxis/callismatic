@@ -1,23 +1,32 @@
 import pytest
 from pydantic import ValidationError
 
-from deskwork.schema import DocumentTriage
+from deskwork.schema import CallTriage
 
 
 def test_minimal_valid_triage():
-    triage = DocumentTriage(
-        doc_type="invoice",
-        summary="An unpaid invoice for office supplies.",
-        needs_decision=True,
-        decision_reason="Payment is overdue.",
-        suggested_action="Pay the invoice or contact the vendor.",
-        deadline="2026-08-28",
+    triage = CallTriage(
+        category="scam",
+        summary="Automated threat demanding a gift-card payment.",
+        needs_decision=False,
+        block_recommended=True,
         urgency="high",
     )
-    assert triage.needs_decision is True
+    assert triage.block_recommended is True
     assert triage.key_facts == {}
 
 
-def test_invalid_doc_type_rejected():
+def test_callback_task_carried_when_recommended():
+    triage = CallTriage(
+        category="routine",
+        summary="Dentist office confirming tomorrow's cleaning.",
+        needs_decision=False,
+        callback_recommended=True,
+        callback_task="Call back and confirm the 2:30pm cleaning appointment.",
+    )
+    assert triage.callback_task == "Call back and confirm the 2:30pm cleaning appointment."
+
+
+def test_invalid_category_rejected():
     with pytest.raises(ValidationError):
-        DocumentTriage(doc_type="spreadsheet", summary="x", needs_decision=False)
+        CallTriage(category="telemarketer", summary="x", needs_decision=False)

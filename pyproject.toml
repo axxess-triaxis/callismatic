@@ -1,7 +1,7 @@
 [project]
 name = "deskwork-agent"
-version = "0.1.0"
-description = "An autonomous document-triage agent that only interrupts you when a real decision is needed."
+version = "0.2.0"
+description = "An autonomous call-triage agent that only interrupts you when a real decision is needed -- and quietly auto-handles or blocks the rest."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -9,13 +9,14 @@ dependencies = [
     "strands-agents>=1.0.0",
     "strands-agents-tools>=0.1.0",
     "boto3>=1.34.0",
-    "pypdf>=5.0.0",
-    "pymupdf>=1.24.0",
-    "pytesseract>=0.3.10",
-    "pillow>=10.0.0",
+    "assemblyai>=1.5.0",
+    "calle-ai>=0.7.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
 ]
+
+[project.optional-dependencies]
+demo = ["pyttsx3>=2.90"]
 
 [project.scripts]
 deskwork = "deskwork.cli:main"

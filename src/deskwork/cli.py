@@ -1,8 +1,9 @@
 """Entrypoint: `deskwork run [inbox_dir]`.
 
-Prints nothing for documents that need no action, and a clear, actionable
-card for every one that does -- the point of the whole project is that this
-output should be short.
+Prints nothing for voicemails that need no action, and a clear, actionable
+card for every one that does -- plus a line for every callback actually
+placed and every number blocked. The point of the whole project is that
+this output should be short.
 """
 
 from __future__ import annotations
@@ -20,13 +21,21 @@ URGENCY_MARKERS = {"none": "", "low": "[low]", "medium": "[MEDIUM]", "high": "[H
 
 
 def _print_report(results):
-    needs_action = [r for r in results if r.error is None and r.triage.needs_decision]
-    filed = [r for r in results if r.error is None and not r.triage.needs_decision]
+    ok = [r for r in results if r.error is None]
+    needs_action = [r for r in ok if r.triage.needs_decision]
+    callbacks = [r for r in ok if r.callback_result is not None]
+    blocked = [r for r in ok if r.triage.block_recommended]
+    filed = [
+        r for r in ok
+        if not r.triage.needs_decision and not r.triage.block_recommended and r.callback_result is None
+    ]
     errors = [r for r in results if r.error is not None]
 
-    print(f"Triaged {len(results)} document(s): "
-          f"{len(needs_action)} need your attention, {len(filed)} filed silently, "
-          f"{len(errors)} unreadable.\n")
+    print(
+        f"Triaged {len(results)} voicemail(s): "
+        f"{len(needs_action)} need your decision, {len(callbacks)} auto-handled via callback, "
+        f"{len(blocked)} blocked, {len(filed)} filed silently, {len(errors)} unreadable.\n"
+    )
 
     if needs_action:
         print("=" * 60)
@@ -34,16 +43,26 @@ def _print_report(results):
         print("=" * 60)
         for r in sorted(needs_action, key=lambda r: r.triage.urgency, reverse=True):
             marker = URGENCY_MARKERS.get(r.triage.urgency, "")
-            print(f"\n{marker} {r.file_name}")
+            print(f"\n{marker} {r.file_name} (caller: {r.caller_number})")
             print(f"  Summary: {r.triage.summary}")
             print(f"  Why: {r.triage.decision_reason}")
             print(f"  Suggested action: {r.triage.suggested_action}")
-            if r.triage.deadline:
-                print(f"  Deadline: {r.triage.deadline}")
+
+    if callbacks:
+        print("\n" + "=" * 60)
+        print("AUTO-HANDLED VIA CALLBACK")
+        print("=" * 60)
+        for r in callbacks:
+            print(f"\n{r.file_name} (caller: {r.caller_number})")
+            print(f"  Task: {r.triage.callback_task}")
+            print(f"  Result: {r.callback_result.get('status', 'unknown')}")
+
+    if blocked:
+        print("\nBlocked: " + ", ".join(f"{r.caller_number} ({r.file_name})" for r in blocked))
 
     if errors:
         print("\n" + "=" * 60)
-        print("COULD NOT READ")
+        print("COULD NOT TRANSCRIBE")
         print("=" * 60)
         for r in errors:
             print(f"  {r.file_name}: {r.error}")
@@ -55,7 +74,12 @@ def _print_report(results):
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("inbox", nargs="?", default="sample_inbox", help="Folder of documents to triage")
+    parser.add_argument("inbox", nargs="?", default="sample_voicemails", help="Folder of voicemail recordings to triage")
+    parser.add_argument(
+        "--no-callbacks",
+        action="store_true",
+        help="Decide callbacks but don't actually place them via CALL-E (dry run, saves free-call quota)",
+    )
     args = parser.parse_args()
 
     inbox_dir = Path(args.inbox)
@@ -64,7 +88,7 @@ def main() -> None:
         sys.exit(1)
 
     agent = build_agent()
-    results = triage_inbox(agent, inbox_dir)
+    results = triage_inbox(agent, inbox_dir, place_callbacks=not args.no_callbacks)
     _print_report(results)
 
 
