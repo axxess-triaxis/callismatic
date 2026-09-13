@@ -133,11 +133,20 @@ tested module, not a stub.
   silently filtered by local carriers before the phone ever rings. This module is the
   extension point for a regional SIP/VoIP partner, not a partner integration itself — that
   needs an actual contract, which no code change can substitute for.
-- **Multi-channel intake** (`triage_text_message` in `triage.py`) — the same schema, agent,
-  and block/callback/record actions, fed an SMS/WhatsApp message body instead of a voicemail
-  transcript (no transcription step needed for text). Actually receiving live messages needs
-  its own webhook server and provider credentials (Twilio SMS or Meta's WhatsApp Business
-  Cloud API) — out of scope here; this is the pipeline side, ready for whatever receives them.
+- **Multi-channel intake — WhatsApp is fully live** (`whatsapp_webhook.py`, built on
+  `triage_text_message` in `triage.py`) — a real FastAPI receiver for the WhatsApp Business
+  Cloud API: verifies Meta's webhook challenge, verifies every message's HMAC-SHA256 signature
+  (`X-Hub-Signature-256`) before trusting it, parses incoming text messages, and triages each
+  one through the exact same pipeline as a voicemail — same schema, same agent, same
+  block/callback/record actions, no transcription step needed since the message body already
+  is the text. Verified end-to-end against a live signed request: a real scam-script WhatsApp
+  message was correctly classified and blocked. Run with
+  `uvicorn callismatic.whatsapp_webhook:app --port 8000`, then point a public HTTPS URL at it
+  (a tunnel for testing, real hosting for production) and register that URL in the Meta App
+  dashboard. Needs `WHATSAPP_APP_ID`/`WHATSAPP_APP_SECRET`/`WHATSAPP_VERIFY_TOKEN` to receive;
+  `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` are only needed to send replies. SMS via
+  Twilio would reuse the identical `triage_text_message` entry point — same pattern, different
+  receiver, not yet built.
 - **Google Sheets CRM sync** (`crm_sheets.py`) — appends every triaged result as a row,
   strictly opt-in and best-effort: a sync failure is logged, never raised, so a CRM outage
   can't break triage. Needs `GOOGLE_SERVICE_ACCOUNT_FILE` (a service account key) and
