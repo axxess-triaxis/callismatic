@@ -40,6 +40,9 @@ from callismatic.whatsapp_webhook import (
 )
 
 
+_mcp_session_cm = None  # holds the entered context manager alive -- see _lifespan
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # A mounted ASGI sub-app's own lifespan is NOT triggered automatically by
@@ -49,8 +52,36 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # app (which uvicorn drives directly, invoking its lifespan itself) worked
     # fine. The MCP session manager's task group has to be entered explicitly
     # here instead.
-    async with mcp_server_instance.session_manager.run():
-        yield
+    #
+    # Entered via raw __aenter__, deliberately never __aexit__'d, with the context
+    # manager object itself kept alive in a module global: found via two real
+    # production failures in sequence, not guessed.
+    #   1. A 502 on the *second* request after deploying to Lambda. Unlike a
+    #      long-lived uvicorn process, Mangum runs the ASGI lifespan cycle (both
+    #      startup AND shutdown) on every single invocation, not once per
+    #      container -- so a plain `async with ...: yield` here tears the session
+    #      manager's task group down at the end of the FIRST request, and
+    #      StreamableHTTPSessionManager.run() also raises if entered a second
+    #      time on the same instance ("can only be called once per instance")
+    #      regardless. Fix: enter it exactly once for the process's whole life
+    #      and never exit it -- Lambda freezes/thaws the container rather than
+    #      cleanly shutting it down between invocations, so there's no real
+    #      "shutdown" to run anyway.
+    #   2. That fix alone still broke under a local 3-invocation simulation: the
+    #      first `session_manager.run().__aenter__()` call's return value wasn't
+    #      kept anywhere, so Python's garbage collector eventually finalized the
+    #      orphaned context-manager object itself -- and its cleanup runs an
+    #      anyio cancel-scope exit, which anyio requires happen in the same task
+    #      it was entered from. GC runs on its own schedule, in whatever task
+    #      happens to be current, which raised "Attempted to exit cancel scope in
+    #      a different task than it was entered in". Fix: keep a strong
+    #      module-level reference to the entered context manager so it's never
+    #      garbage collected during the process's life.
+    global _mcp_session_cm
+    if _mcp_session_cm is None:
+        _mcp_session_cm = mcp_server_instance.session_manager.run()
+        await _mcp_session_cm.__aenter__()
+    yield
 
 
 app = FastAPI(title="Callismatic", lifespan=_lifespan)
