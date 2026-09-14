@@ -122,7 +122,7 @@ docker, gradio, huggingface-spaces
 
 - **Try it out (repo)**: https://github.com/axxess-triaxis/callismatic
 - **License**: MIT (in repo)
-- **AWS Builder ID**: [founder to fill in]
+- **AWS Builder ID**: official@triaxisventures.com
 
 ---
 
