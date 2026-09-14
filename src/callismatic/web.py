@@ -24,6 +24,7 @@ from typing import AsyncIterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel
+from starlette.routing import Route
 
 from callismatic.agent import build_agent
 from callismatic.corrections import record_correction
@@ -89,10 +90,27 @@ app = FastAPI(title="Callismatic", lifespan=_lifespan)
 # The MCP server (mcp_server.py) is the same read-only/safe tool set as the JSON
 # API above, exposed over Streamable HTTP so an MCP client -- an Alexa+ Agent
 # Skill, Claude Desktop, or any other MCP-speaking client -- can call it directly.
-# Mounted onto the same already-deployed Lambda rather than standing up a second
-# service, so it reuses the exact same Bedrock creds, Secrets Manager wiring, and
-# IAM role the rest of this app already has.
-app.mount("/mcp", mcp_asgi_app)
+# Registered on the same already-deployed Lambda rather than standing up a
+# second service, so it reuses the exact same Bedrock creds, Secrets Manager
+# wiring, and IAM role the rest of this app already has.
+#
+# A direct Route at the exact path, NOT app.mount("/mcp", mcp_asgi_app) -- found
+# by adding temporary debug logging and reading the real scope Lambda
+# constructs, after three prior fix attempts (lifespan double-entry, DNS-
+# rebinding host validation) were each real and each confirmed via local Mangum
+# simulation, yet the live URL kept 307-redirecting /mcp/ to itself regardless.
+# The actual cause: AWS Lambda Function URLs strip a trailing slash before
+# Mangum ever constructs the ASGI scope -- confirmed directly from a live
+# CloudWatch log line for a request sent to "/mcp/": `path='/mcp'`. A synthetic
+# local test event can't reproduce this because it never goes through AWS's own
+# normalization; only a real request does. Starlette's Mount, on seeing the
+# request path exactly equal its own registered prefix with nothing left over,
+# redirects to add a trailing slash -- and since every subsequent request also
+# gets normalized back to no-trailing-slash by AWS itself, the redirect target
+# is unreachable by construction: infinite loop, not a transient bug. A plain
+# Route matches the exact literal path with no prefix-stripping or trailing-
+# slash semantics to go wrong, sidestepping the mismatch entirely.
+app.router.routes.append(Route("/mcp", endpoint=mcp_asgi_app.routes[0].app, methods=None))
 
 _agent = None
 

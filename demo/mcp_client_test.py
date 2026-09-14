@@ -7,6 +7,13 @@ prove the real transport, not just the underlying business logic.
 Usage:
     python -m callismatic.mcp_server &      # start the server (or point --url elsewhere)
     python demo/mcp_client_test.py [--url http://127.0.0.1:8001/]
+
+Against the deployed app (web.py, mounted as a direct Route -- see the comment
+above app.router.routes.append(...) in web.py for why it's a Route and not a
+Mount): use .../mcp with NO trailing slash. AWS Lambda Function URLs strip a
+trailing slash before the app ever sees it, so a Route registered at the exact
+literal "/mcp" is what actually matches every real request, regardless of
+which form the client asks for.
 """
 
 from __future__ import annotations
