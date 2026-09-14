@@ -18,8 +18,9 @@ from __future__ import annotations
 import html
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import AsyncIterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -27,6 +28,8 @@ from pydantic import BaseModel
 from callismatic.agent import build_agent
 from callismatic.corrections import record_correction
 from callismatic.digest_report import BLOCKLIST_PATH, DIGEST_PATH, generate_weekly_digest
+from callismatic.mcp_server import app as mcp_asgi_app
+from callismatic.mcp_server import mcp as mcp_server_instance
 from callismatic.reminders import add_reminder, send_due_reminders
 from callismatic.todos import TODOS_PATH, complete_todo, list_todos
 from callismatic.tools import find_digest_entry, unblock_number
@@ -36,7 +39,29 @@ from callismatic.whatsapp_webhook import (
     verify_signature,
 )
 
-app = FastAPI(title="Callismatic")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # A mounted ASGI sub-app's own lifespan is NOT triggered automatically by
+    # Starlette's Mount -- found via a real live-client test that failed with
+    # "Task group is not initialized. Make sure to use run()." on the very first
+    # /mcp request through the full app, even though the standalone mcp_server.py
+    # app (which uvicorn drives directly, invoking its lifespan itself) worked
+    # fine. The MCP session manager's task group has to be entered explicitly
+    # here instead.
+    async with mcp_server_instance.session_manager.run():
+        yield
+
+
+app = FastAPI(title="Callismatic", lifespan=_lifespan)
+
+# The MCP server (mcp_server.py) is the same read-only/safe tool set as the JSON
+# API above, exposed over Streamable HTTP so an MCP client -- an Alexa+ Agent
+# Skill, Claude Desktop, or any other MCP-speaking client -- can call it directly.
+# Mounted onto the same already-deployed Lambda rather than standing up a second
+# service, so it reuses the exact same Bedrock creds, Secrets Manager wiring, and
+# IAM role the rest of this app already has.
+app.mount("/mcp", mcp_asgi_app)
 
 _agent = None
 

@@ -557,6 +557,23 @@ tested module, not a stub.
   `digest`) delivers every reminder that's now due through the same WhatsApp send path,
   falling back to `stdout` if WhatsApp isn't configured or delivery fails, so a reminder is
   never silently lost. Verified: a real reminder sent and received on a verified test number.
+- **MCP server, for Alexa+ and any other MCP-speaking client** (`mcp_server.py`) — the same
+  read-only tool set as the JSON API (`get_weekly_digest`, `list_blocked_numbers`,
+  `list_open_todos`, `check_caller`), plus `triage_message` for a live Bedrock/Nova triage
+  call, exposed over Streamable HTTP (protocol version negotiated per-request; confirmed
+  live at 2025-11-25, the Alexa+ integration standard's minimum). Mounted at `/mcp` on the
+  same `web.py` app the Lambda deployment already runs, rather than a separate service.
+  `triage_message` never places a real callback or mutates state — decide-and-report only,
+  the same boundary discipline as every other public route. Verified two ways: a real MCP
+  client (`demo/mcp_client_test.py`) completing a genuine protocol handshake and a live
+  `triage_message` call, both against the standalone server and through the actual mounted
+  `/mcp` path on `web.py` (run locally via uvicorn) — which is how a real lifespan-wiring bug
+  (a mounted ASGI sub-app's own lifespan isn't triggered automatically by Starlette's
+  `Mount`) was actually caught, not guessed at. What's **not** yet verified: this hasn't been
+  redeployed to the live Lambda itself yet (same rebuild-and-push step as any other `web.py`
+  change — see [Deployment](#deployment)), and no real Alexa+ device or Agent Skill has called
+  it — Alexa+ itself is in limited preview. This proves the server side of the integration is
+  spec-compliant and working, not that Amazon's own client has connected to it.
 
 ## Why not a real Truecaller integration
 
