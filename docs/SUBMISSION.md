@@ -118,7 +118,7 @@ docker, gradio, huggingface-spaces
 
 ---
 
-## Agents for Humans — additional fields
+## Agents for Humans — additional fields — **SUBMITTED** (founder-confirmed, 2026-09-14)
 
 - **Try it out (repo)**: https://github.com/axxess-triaxis/callismatic
 - **License**: MIT (in repo)
@@ -126,7 +126,7 @@ docker, gradio, huggingface-spaces
 
 ---
 
-## Call-E — additional fields
+## Call-E — additional fields — **SUBMITTED** (founder-confirmed, 2026-09-14)
 
 - **Pull request URL**: https://github.com/CALLE-AI/awesome-phone-call-agents/pull/527
 - **CALL-E account email**: [founder to fill in]
@@ -198,7 +198,8 @@ run** — that document is the design ACT III's build window would build a first
 
 ## Founder-only steps (need your login, not something Claude can do)
 
-1. Record the demo video(s) per docs/DEMO_SCRIPT.md.
-2. Create/confirm accounts: AWS Builder ID, CALL-E account, lablab.ai account, AMD AI Developer
-   Program account (for ACT III specifically).
-3. Submit each Devpost/lablab.ai form with the text above.
+1. ~~Record the demo video(s) per docs/DEMO_SCRIPT.md.~~ Done.
+2. ~~Submit Agents for Humans and Call-E.~~ **Both submitted 2026-09-14.**
+3. Still open: AssemblyAI Voice Agent Hackathon (lablab.ai) submission, and AMD Developer
+   Hackathon: ACT III (deadline Oct 18, 2026) — needs an AMD AI Developer Program account and
+   AMD compute credit approval before any training work can start.
