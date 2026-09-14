@@ -32,7 +32,7 @@ def _print_report(results):
     ok = [r for r in results if r.error is None]
     needs_action = [r for r in ok if r.triage.needs_decision]
     callback_decided = [r for r in ok if r.triage.callback_recommended]
-    callback_placed = [r for r in callback_decided if r.callback_result is not None]
+    callback_placed = [r for r in callback_decided if r.callback_result is not None and r.callback_result.get("status") != "provider_error"]
     blocked = [r for r in ok if r.triage.block_recommended]
     filed = [
         r for r in ok
@@ -65,7 +65,9 @@ def _print_report(results):
         for r in callback_decided:
             print(f"\n{r.file_name} (caller: {r.caller_number})")
             print(f"  Task: {r.triage.callback_task}")
-            if r.callback_result is not None:
+            if r.callback_result is not None and r.callback_result.get("status") == "provider_error":
+                print(f"  Result: FAILED to place -- {r.callback_result.get('error', 'unknown error')}")
+            elif r.callback_result is not None:
                 print(f"  Result: placed via CALL-E -- status {r.callback_result.get('status', 'unknown')}")
             else:
                 print("  Result: NOT placed (dry run / --no-callbacks, or unknown caller number)")
