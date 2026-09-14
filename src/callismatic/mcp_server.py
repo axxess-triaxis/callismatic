@@ -142,11 +142,20 @@ def build_app(*, stateless: bool = True):
     SSE-streaming path in favor of plain request/response, which is what a stateless
     Lambda deployment actually needs.
     """
-    return mcp.streamable_http_app(
+    http_app = mcp.streamable_http_app(
         streamable_http_path="/",
         json_response=stateless,
         stateless_http=stateless,
     )
+    # A mounted sub-app's own redirect_slashes handling doesn't correctly account
+    # for the parent's mount prefix -- found live against the real Lambda URL: a
+    # POST to /mcp redirected to /mcp/, and /mcp/ redirected right back to
+    # /mcp/, an infinite loop (a real, reproducible Starlette gotcha with nested
+    # apps, confirmed with curl -v showing the exact Location header each time).
+    # This sub-app has exactly one route, registered at "/" -- there's nothing
+    # for slash-redirection to usefully do here, so disable it outright.
+    http_app.router.redirect_slashes = False
+    return http_app
 
 
 app = build_app()
