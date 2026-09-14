@@ -138,7 +138,19 @@ def _decide_and_act(
 
     callback_result = None
     if triage.callback_recommended and triage.callback_task and place_callbacks and caller_number != "unknown":
-        callback_result = route_call(triage.callback_task, caller_number)
+        try:
+            callback_result = route_call(triage.callback_task, caller_number)
+        except Exception as e:  # noqa: BLE001 -- a calling provider's own real-world failure
+            # (rejected task text, network error, quota) must degrade this one voicemail's
+            # result, never crash the whole batch -- the same boundary discipline as
+            # carrier_intel.check_carrier_intel's "never raises."
+            #
+            # "provider_error", not "failed": CALL-E's own wait_for_result can legitimately
+            # return status="failed" for a real, successfully-created call that just didn't
+            # connect (no answer, unreachable number) -- that's a genuine CALL-E result, not
+            # an exception, and must stay distinguishable from "we never even reached CALL-E
+            # with a valid request" (a rejected task, a timeout, a network error).
+            callback_result = {"status": "provider_error", "error": str(e)}
 
     return TriageResult(
         file_name=source_name,
@@ -222,7 +234,10 @@ async def _decide_and_act_async(
 
     callback_result = None
     if triage.callback_recommended and triage.callback_task and place_callbacks and caller_number != "unknown":
-        callback_result = await asyncio.to_thread(route_call, triage.callback_task, caller_number)
+        try:
+            callback_result = await asyncio.to_thread(route_call, triage.callback_task, caller_number)
+        except Exception as e:  # noqa: BLE001 -- see the sync path's identical guard in _decide_and_act
+            callback_result = {"status": "provider_error", "error": str(e)}
 
     return TriageResult(
         file_name=source_name,

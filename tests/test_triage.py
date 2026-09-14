@@ -41,6 +41,65 @@ def test_triage_text_message_routes_through_shared_pipeline(tmp_path, monkeypatc
     assert result.callback_result == {"status": "completed"}
 
 
+def test_triage_text_message_survives_callback_provider_failure(tmp_path, monkeypatch):
+    # Real regression: CALL-E's API rejected a vague callback_task ("Confirm the 2:30 PM
+    # cleaning appointment" -- no patient/booking name) with a CalleAPIError, and that
+    # exception propagated straight out of route_call and crashed the whole batch run
+    # instead of degrading just this one voicemail's result -- the same boundary
+    # discipline carrier_intel.check_carrier_intel already follows ("never raises").
+    monkeypatch.setattr("callismatic.tools.DIGEST_PATH", tmp_path / "digest.json")
+    monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
+
+    fake_route_call = MagicMock(side_effect=RuntimeError("Call task creation was rejected: ..."))
+    monkeypatch.setattr("callismatic.triage.route_call", fake_route_call)
+
+    triage = CallTriage(
+        category="routine",
+        summary="Confirming a cleaning appointment.",
+        needs_decision=False,
+        callback_recommended=True,
+        callback_task="Confirm the 2:30 PM cleaning appointment.",
+    )
+    fake_agent = MagicMock()
+    fake_agent.return_value.structured_output = triage
+
+    result = triage_text_message(
+        fake_agent, "sms", "+15550003333", "msg-3", "This is Lakeside Dental confirming your appointment."
+    )
+
+    assert result.error is None
+    assert result.callback_result == {"status": "provider_error", "error": "Call task creation was rejected: ..."}
+
+
+def test_triage_text_message_distinguishes_real_calle_failed_status_from_provider_error(tmp_path, monkeypatch):
+    # CALL-E's own wait_for_result can legitimately return status="failed" for a call that
+    # was genuinely created and attempted but never connected (no answer, unreachable number
+    # -- exactly what happens calling this project's fictional +1555 sample numbers). That is
+    # a real CALL-E result, not an exception, and must stay distinguishable from
+    # "provider_error" (never even reached CALL-E with a valid request) -- the fix above must
+    # not make a real CALL-E failure collide with route_call raising.
+    monkeypatch.setattr("callismatic.tools.DIGEST_PATH", tmp_path / "digest.json")
+    monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
+
+    fake_route_call = MagicMock(return_value={"status": "failed", "call_id": "call_123"})
+    monkeypatch.setattr("callismatic.triage.route_call", fake_route_call)
+
+    triage = CallTriage(
+        category="lead",
+        summary="Kitchen remodel inquiry.",
+        needs_decision=False,
+        callback_recommended=True,
+        callback_task="Call Daniel Ortiz back about the kitchen remodel.",
+    )
+    fake_agent = MagicMock()
+    fake_agent.return_value.structured_output = triage
+
+    result = triage_text_message(fake_agent, "sms", "+15550002222", "msg-4", "Kitchen remodel inquiry.")
+
+    assert result.callback_result == {"status": "failed", "call_id": "call_123"}
+    assert result.callback_result.get("status") != "provider_error"
+
+
 def test_triage_text_message_skips_callback_when_not_recommended(tmp_path, monkeypatch):
     monkeypatch.setattr("callismatic.tools.DIGEST_PATH", tmp_path / "digest.json")
     monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
