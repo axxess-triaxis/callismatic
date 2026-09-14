@@ -25,6 +25,12 @@ demo = ["pyttsx3>=2.90"]
 # service-account auth pattern and the same client libraries.
 google = ["google-api-python-client>=2.100.0", "google-auth>=2.20.0"]
 whatsapp = ["fastapi>=0.110.0", "uvicorn>=0.27.0"]
+# Not a runtime dependency of this package -- Dockerfile installs mangum directly
+# for the actual Lambda image. This extra exists so a real Lambda Function URL
+# event can be simulated locally against the real Mangum handler (see the
+# investigation behind the MCP transport-security and lifespan fixes in
+# web.py/mcp_server.py) without an ad-hoc pip install every time.
+lambda-sim = ["mangum>=0.17.0"]
 
 [project.scripts]
 callismatic = "callismatic.cli:main"

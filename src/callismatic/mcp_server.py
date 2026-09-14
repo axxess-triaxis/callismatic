@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 from callismatic.agent import build_agent
 from callismatic.digest_report import BLOCKLIST_PATH, DIGEST_PATH, generate_weekly_digest
@@ -142,18 +143,31 @@ def build_app(*, stateless: bool = True):
     SSE-streaming path in favor of plain request/response, which is what a stateless
     Lambda deployment actually needs.
     """
+    # DNS-rebinding Host-header validation, ON by default in this SDK, rejects any
+    # Host it doesn't recognize with 421 "Invalid Host header" -- and a Lambda
+    # Function URL's hostname is assigned dynamically by AWS at function creation,
+    # not something to hardcode into an allow-list. Found by faithfully simulating
+    # a real Lambda Function URL event through the actual Mangum handler locally
+    # (not guessed): a POST to /mcp/ with the real deployed hostname came back 421,
+    # body "Invalid Host header" -- the redirect loop curl showed against the live
+    # URL is this same rejection interacting badly with Starlette's redirect
+    # handling, not a separate bug. Disabling it here is a deliberate trade-off,
+    # not a blanket "turn off security": this protection exists to stop a
+    # malicious webpage from using DNS rebinding to reach a server that trusts
+    # `localhost`/cookie-based auth -- this server has no cookie or session-based
+    # auth for rebinding to exploit, and every route is already public/read-mostly
+    # by the same posture web.py's own docstring already states for the rest of
+    # this app.
+    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     http_app = mcp.streamable_http_app(
         streamable_http_path="/",
         json_response=stateless,
         stateless_http=stateless,
+        transport_security=security,
     )
-    # A mounted sub-app's own redirect_slashes handling doesn't correctly account
-    # for the parent's mount prefix -- found live against the real Lambda URL: a
-    # POST to /mcp redirected to /mcp/, and /mcp/ redirected right back to
-    # /mcp/, an infinite loop (a real, reproducible Starlette gotcha with nested
-    # apps, confirmed with curl -v showing the exact Location header each time).
-    # This sub-app has exactly one route, registered at "/" -- there's nothing
-    # for slash-redirection to usefully do here, so disable it outright.
+    # Belt-and-suspenders: this sub-app has exactly one route, registered at "/",
+    # so there's no real ambiguity for slash-redirection to resolve -- disabled
+    # outright rather than left to interact with the parent Mount's own handling.
     http_app.router.redirect_slashes = False
     return http_app
 
