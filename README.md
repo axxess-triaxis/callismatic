@@ -1,8 +1,9 @@
 # Callismatic
 
-**A personal and phone secretary AI agent.** It listens to the voicemails you'd never check,
-decides what needs you, quietly handles or blocks the rest — then carries that same judgment
-into your to-dos, calendar, CRM, and messaging.
+**A personal secretary AI agent, with a phone operator built in.** It manages the parts of
+your day a real assistant would — WhatsApp messages, your to-do list, calendar, CRM, and
+meeting notes — and, as one of those functions, listens to the voicemails you'd never check,
+deciding what needs you and quietly handling or blocking the rest.
 
 Callismatic is the **individual** half of AXXESS TRIaxis's individual + enterprise product
 configuration. **AXXESS TRIaxis**, built by **Triaxis Ventures Private Limited** (founded by
@@ -78,20 +79,22 @@ of a human having to choose blanket silence over constant interruption.
 ## What Callismatic is
 
 Callismatic is framed deliberately as **a secretary, not a filter** — the audience is a solo
-consultant, freelancer, or small-business owner who doesn't have staff to screen calls or
-manage the follow-up work those calls generate. That's two related but distinct jobs a human
-assistant would do, and Callismatic does both:
+consultant, freelancer, or small-business owner who doesn't have staff to screen calls,
+manage messages, or handle the follow-up work either one generates. That's two related but
+distinct jobs a human assistant would do — Callismatic is the personal secretary first, with
+phone operation as one of the functions it performs, not the whole identity:
 
-**As a phone secretary**, it listens to every voicemail (or incoming SMS/WhatsApp message),
+**As a personal secretary**, it turns what happens across your calls and messages into the
+things a real assistant would hand you afterward: structured notes from a completed callback,
+a to-do list built from what actually needs your attention, calendar availability and booking
+for anything that needs scheduling, a synced CRM row for every real contact, and reminders
+delivered back to you on WhatsApp — instead of any of that living only in a terminal's
+scrollback from whichever run produced it.
+
+**As a phone operator**, it listens to every voicemail (or incoming SMS/WhatsApp message),
 decides what kind of caller it is, and acts on that decision without waiting to be asked:
 blocks confirmed scam/spam numbers, places a real callback for anything simple enough to
 handle without a human's judgment, or surfaces genuinely important calls with full context.
-
-**As a personal secretary**, it turns what happens on those calls into the things a real
-assistant would hand you afterward: structured notes from a completed callback, a to-do list
-built from what actually needs your attention, calendar availability and booking for anything
-that needs scheduling, and reminders delivered back to you on WhatsApp — instead of any of
-that living only in a terminal's scrollback from whichever run produced it.
 
 ## Use cases
 
