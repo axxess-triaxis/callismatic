@@ -224,7 +224,7 @@ def dashboard() -> Response:
 
     todo_rows = "".join(
         f'<div class="list-row todo-row"><span class="todo-check">&#9744;</span>'
-        f'<span>{esc(t["text"])}</span><span class="muted">{esc(t["source"])}</span></div>'
+        f'<span class="todo-body">{esc(t["text"])}<span class="muted todo-source">{esc(t["source"])}</span></span></div>'
         for t in todos
     ) or '<p class="empty">No open to-dos.</p>'
 
@@ -244,7 +244,7 @@ body {{
   margin: 0; padding: 2.5rem 1.5rem;
   background: var(--bg); color: var(--text);
 }}
-.wrap {{ max-width: 960px; margin: 0 auto; }}
+.wrap {{ max-width: 1180px; margin: 0 auto; }}
 header {{ margin-bottom: 2.5rem; }}
 h1 {{ margin: 0 0 0.35rem; font-size: 1.6rem; letter-spacing: -0.02em; }}
 p.tagline {{ color: var(--text-muted); margin: 0; font-size: 0.95rem; }}
@@ -257,6 +257,13 @@ section {{ margin-bottom: 2.5rem; }}
 .stat-grid {{
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.85rem; margin-bottom: 2.5rem;
+}}
+
+.main-grid {{ display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; align-items: start; }}
+.sidebar {{ display: flex; flex-direction: column; gap: 2rem; }}
+.sidebar section {{ margin-bottom: 0; }}
+@media (max-width: 820px) {{
+  .main-grid {{ grid-template-columns: 1fr; }}
 }}
 .stat-card {{
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
@@ -295,9 +302,11 @@ section {{ margin-bottom: 2.5rem; }}
   padding: 0.6rem 0.2rem; border-bottom: 1px solid var(--border); font-size: 0.88rem;
 }}
 .list-row:last-child {{ border-bottom: none; }}
+.list-row.todo-row {{ align-items: flex-start; }}
 .todo-row {{ justify-content: flex-start; }}
-.todo-row span:nth-child(2) {{ flex: 1; }}
-.todo-check {{ color: var(--text-muted); }}
+.todo-body {{ display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }}
+.todo-source {{ font-size: 0.76rem; }}
+.todo-check {{ color: var(--text-muted); line-height: 1.4; }}
 .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }}
 .muted {{ color: var(--text-muted); font-size: 0.82rem; }}
 .empty {{ color: var(--text-muted); font-size: 0.88rem; font-style: italic; margin: 0; }}
@@ -316,20 +325,24 @@ section {{ margin-bottom: 2.5rem; }}
   <div class="stat-card"><div class="stat-number">{len(todos)}</div><div class="stat-label">Open to-dos</div></div>
 </div>
 
+<div class="main-grid">
 <section>
 <h2>Recent triage decisions</h2>
 {digest_cards}
+</section>
+
+<div class="sidebar">
+<section>
+<h2>Open to-dos</h2>
+<div class="card">{todo_rows}</div>
 </section>
 
 <section>
 <h2>Blocked numbers</h2>
 <div class="card">{blocklist_rows}</div>
 </section>
-
-<section>
-<h2>Open to-dos</h2>
-<div class="card">{todo_rows}</div>
-</section>
+</div>
+</div>
 </div>
 </body></html>"""
     return Response(content=body, media_type="text/html")
