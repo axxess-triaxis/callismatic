@@ -52,6 +52,13 @@ Manager" algorithm from a prompted agent into a purpose-trained, horizontally sc
 Design is written up in [docs/AMD_ACT3_ARCHITECTURE.md](docs/AMD_ACT3_ARCHITECTURE.md); as of
 this writing no AMD compute has been provisioned and no training has run.
 
+**Roadmap — email**: email as a third message channel alongside voicemail and WhatsApp, on the
+same "alternative front door" pattern AssemblyAI and WhatsApp already share (both terminate as
+plain text handed to `_decide_and_act`/`_decide_and_act_async` in `triage.py` — the agent
+doesn't know or care which channel a message arrived from). Not yet built; the natural next
+integration given how much of Callismatic's real value is already the personal-secretary
+side (calendar, CRM, notes, reminders, to-dos) rather than the phone-triage origin alone.
+
 **Live deployment**: a two-column dashboard (KPI stats, category-colored triage cards, a
 to-dos/blocked-numbers sidebar) + WhatsApp webhook + scoped JSON API + MCP server (`web.py`)
 is deployed to AWS Lambda at
@@ -659,6 +666,7 @@ something it isn't either.
 - The scam-script check is a content heuristic, not a carrier-verified signal — see above.
 - Google Tasks and real inbound SMS (Twilio) are named but not built — see the relevant
   bullets above for exactly why and what each would need.
+- Email as a message channel — named as near-term roadmap above, not yet built.
 
 ## Deployment
 
