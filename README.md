@@ -569,11 +569,37 @@ tested module, not a stub.
   `triage_message` call, both against the standalone server and through the actual mounted
   `/mcp` path on `web.py` (run locally via uvicorn) — which is how a real lifespan-wiring bug
   (a mounted ASGI sub-app's own lifespan isn't triggered automatically by Starlette's
-  `Mount`) was actually caught, not guessed at. What's **not** yet verified: this hasn't been
-  redeployed to the live Lambda itself yet (same rebuild-and-push step as any other `web.py`
-  change — see [Deployment](#deployment)), and no real Alexa+ device or Agent Skill has called
-  it — Alexa+ itself is in limited preview. This proves the server side of the integration is
-  spec-compliant and working, not that Amazon's own client has connected to it.
+  `Mount`) was actually caught, not guessed at. Redeployed to the live Lambda and verified
+  there directly (`demo/mcp_client_test.py` against the deployed Function URL's `/mcp` path,
+  no trailing slash — see the module's own docstring for why) — three more real, Lambda-specific
+  bugs were found and fixed in the process: the MCP session manager's context manager being
+  re-entered and torn down on every single invocation (Mangum runs the full ASGI lifespan
+  cycle on every cold *and* warm invocation, unlike uvicorn), the SDK's DNS-rebinding
+  protection rejecting the Lambda Function URL's own host header, and AWS Lambda Function
+  URLs silently stripping a trailing slash before Starlette's `Mount` ever sees the request
+  (undocumented, confirmed via live debug logging). What's **not** verified: no real Alexa+
+  device or Agent Skill has called it — Alexa+ itself is in limited preview. This proves the
+  server side of the integration is spec-compliant and working end-to-end in production, not
+  that Amazon's own client has connected to it.
+- **Nebius Token Factory model routing (Nebius x NVIDIA Global AI Hackathon)** (`models.py`)
+  — opt-in, same "absent means unchanged" pattern as everything else in this section: unset
+  `NEBIUS_API_KEY` means `get_model()` returns exactly the same plain `BedrockModel` it always
+  did. When set, returns a Strands `ModelRouter([nebius, bedrock], strategy=FallbackStrategy())`
+  trying Nebius/Nemotron 3 Nano first, falling back to Bedrock automatically if Nebius is ever
+  unavailable — Bedrock stays the safety net, not something replaced. Verified live, both real
+  failure modes, not assumed: a real end-to-end triage run (one voicemail, two tool calls)
+  completed successfully through Nebius (`max_tokens=8000`, ~10.7k accumulated output tokens,
+  ~116s, correct category and summary); separately, a genuinely invalid `NEBIUS_API_KEY`
+  correctly triggered the fallback to Bedrock in ~11s with a correct result. One real,
+  documented cost characteristic: Nemotron 3 Nano is a reasoning model, and the OpenAI Chat
+  Completions API has no way to carry its `reasoningContent` across turns, so it re-derives
+  reasoning from scratch every turn inside the agent's tool-calling loop — and `FallbackStrategy`
+  does **not** catch `MaxTokensReachedException` (verified against the router's own source), only
+  a genuine call failure, so a generous `max_tokens` (raised to 8000 after a real crash at the
+  old default of 2000) is the actual mitigation for that specific failure mode, not the fallback
+  itself. What's **not** yet true: `NEBIUS_API_KEY` isn't in the production secret
+  (`callismatic/prod` in Secrets Manager) yet, so the deployed Lambda currently runs plain
+  Bedrock exactly as before — Nebius routing is proven locally, not yet active in production.
 
 ## Why not a real Truecaller integration
 
