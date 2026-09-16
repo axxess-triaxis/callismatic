@@ -4,10 +4,16 @@
 decides what needs you, quietly handles or blocks the rest — then carries that same judgment
 into your to-dos, calendar, CRM, and messaging.
 
-Callismatic is part of **AXXESS TRIaxis**, an Enterprise SaaS and Organizational OS platform
-built by **Triaxis Ventures Private Limited**, founded by **Mr. Sudipta Koushik Sarmah** and
-**Ms. Ritashree Mahanta**. This repo is cloned and integrated into AXXESS TRIaxis's public
-repository at [github.com/axxess-triaxis/AXXESSTRIAXIS](https://github.com/axxess-triaxis/AXXESSTRIAXIS).
+Callismatic is the **individual** half of AXXESS TRIaxis's individual + enterprise product
+configuration. **AXXESS TRIaxis**, built by **Triaxis Ventures Private Limited** (founded by
+**Mr. Sudipta Koushik Sarmah** and **Ms. Ritashree Mahanta**), is an Enterprise SaaS and
+Organizational OS platform on the enterprise side — governance, workspace, and org-wide
+tooling for a company. Callismatic is the same underlying judgment (triage what needs a
+person, quietly handle or block the rest) scoped down to one person's own calls, messages,
+and to-dos, rather than an organization's. This repo is cloned and integrated into AXXESS
+TRIaxis's public repository at
+[github.com/axxess-triaxis/AXXESSTRIAXIS](https://github.com/axxess-triaxis/AXXESSTRIAXIS)
+(`apps/callismatic`).
 
 Built on the [Strands Agents SDK](https://strandsagents.com/) running on **Amazon Bedrock**
 and **Amazon Nova**, for the [Agents for Humans Hackathon](https://agentsforhumans.devpost.com/)
@@ -15,9 +21,27 @@ and **Amazon Nova**, for the [Agents for Humans Hackathon](https://agentsforhuma
 transcription via [AssemblyAI](https://www.assemblyai.com/), real outbound callbacks via
 [CALL-E](https://heycall-e.com/), meeting notes, a synced Google Sheets CRM, Google Calendar
 availability/booking, a Twilio-backed SMS/verify number, and a WhatsApp Business
-receiver/sender — all on the same triage pipeline. Submitted separately to each hackathon's
-respective track; see [docs/SUBMISSION.md](docs/SUBMISSION.md) for the per-hackathon
-breakdown. A lightweight, credential-free demo of the triage output is also live on
+receiver/sender — all on the same triage pipeline. It is also fully configurable as an
+**Amazon Alexa+** tool source: the same app exposes a spec-compliant MCP server (see
+[Beyond the demo pipeline](#beyond-the-demo-pipeline-opt-in-extensions-already-built) below)
+that any MCP-speaking Alexa+ Agent Skill can be pointed at to reach Callismatic's live digest,
+blocklist, to-dos, and triage tool.
+
+Submitted or in progress across **7 hackathons** total, each targeting a different piece of
+this same codebase rather than 7 separate builds — see
+[docs/SUBMISSION.md](docs/SUBMISSION.md) for the per-hackathon breakdown:
+
+| Hackathon | Status |
+|---|---|
+| Agents for Humans | **Submitted** (2026-09-14) |
+| Call-E | **Submitted** (2026-09-14) |
+| AssemblyAI Voice Agent Hackathon (lablab.ai) | Built, pending submission |
+| AMD Developer Hackathon: ACT III (lablab.ai) | Built, pending submission — deadline Oct 18, 2026 |
+| AMD Developer Hackathon (second track) | Pending submission |
+| Nebius x NVIDIA Global AI Hackathon | Built and verified locally, pending submission |
+| Build, Ship, Shape: Amazon Developer Hackathon (Alexa+) | Built and verified live on the deployed MCP server, pending submission |
+
+A lightweight, credential-free demo of the triage output is also live on
 [Hugging Face Spaces](https://huggingface.co/spaces/SKS1213/callismatic).
 
 **Roadmap — AMD + Kubernetes**: a Kubernetes-orchestrated fine-tuning pipeline on AMD GPU
@@ -27,8 +51,10 @@ Manager" algorithm from a prompted agent into a purpose-trained, horizontally sc
 Design is written up in [docs/AMD_ACT3_ARCHITECTURE.md](docs/AMD_ACT3_ARCHITECTURE.md); as of
 this writing no AMD compute has been provisioned and no training has run.
 
-**Live deployment**: a dashboard + WhatsApp webhook + scoped JSON API (`web.py`) is deployed
-to AWS Lambda at https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/ — see
+**Live deployment**: a two-column dashboard (KPI stats, category-colored triage cards, a
+to-dos/blocked-numbers sidebar) + WhatsApp webhook + scoped JSON API + MCP server (`web.py`)
+is deployed to AWS Lambda at
+https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/ — see
 [Deployment](#deployment) below for how, and exactly what it does and doesn't expose
 publicly.
 
@@ -317,7 +343,11 @@ one.
 (`global.anthropic.claude-sonnet-4-6`); Amazon Nova (`amazon.nova-pro-v1:0`) is the current
 fallback, since Claude on Bedrock needs both an Anthropic use-case form *and* a valid AWS
 Marketplace payment method, and this account currently fails
-`AccessDeniedException: INVALID_PAYMENT_INSTRUMENT` on the latter.
+`AccessDeniedException: INVALID_PAYMENT_INSTRUMENT` on the latter. Bedrock is also the
+always-on safety net for a second, opt-in provider: Nebius Token Factory (OpenAI-compatible,
+`strands.models.openai.OpenAIModel`), routed via a Strands `ModelRouter`/`FallbackStrategy` —
+see the Nebius bullet under [Beyond the demo
+pipeline](#beyond-the-demo-pipeline-opt-in-extensions-already-built).
 
 **Voice & telephony** — [AssemblyAI](https://www.assemblyai.com/) for real speech-to-text on
 voicemail recordings; [CALL-E](https://heycall-e.com/) (`calle-ai` SDK) for placing real,
@@ -336,9 +366,11 @@ sharing model and would need a full OAuth consent flow); [Todoist](https://todoi
 its plain personal-API-token REST API (`todoist_sync.py`), chosen over Google Tasks for the
 same reason.
 
-**Web/API layer** — [FastAPI](https://fastapi.tiangolo.com/) (`web.py`): a server-rendered
-HTML dashboard, a read-only JSON API, an `X-API-Key`-gated mutating API, and the WhatsApp
-webhook, all in one app.
+**Web/API layer** — [FastAPI](https://fastapi.tiangolo.com/) (`web.py`): a server-rendered,
+two-column HTML dashboard (hand-rolled CSS, no client-side framework or build step), a
+read-only JSON API, an `X-API-Key`-gated mutating API, the WhatsApp webhook, and an MCP server
+(`mcp_server.py`, Streamable HTTP, for Alexa+ and other MCP-speaking clients) — all in one app,
+one Lambda deployment.
 
 **Data validation** — [Pydantic](https://docs.pydantic.dev/) for every structured shape
 (`CallTriage`, `MeetingNotes`, and the FastAPI request/response models in `web.py`).
@@ -350,7 +382,7 @@ Function URL), AWS Secrets Manager (`callismatic/prod` — fetched once at cold 
 ASGI-to-Lambda adapter.
 
 **Testing** — `pytest`, with every external service (Bedrock, AssemblyAI, CALL-E, Twilio,
-Google, Todoist, WhatsApp) mocked at the boundary so the suite (82 tests) runs with no live
+Google, Todoist, WhatsApp) mocked at the boundary so the suite (95 tests) runs with no live
 credentials.
 
 **Language/runtime** — Python 3.11+, `asyncio` for the concurrent triage path,
@@ -489,9 +521,10 @@ number.
 pytest
 ```
 
-82 tests, covering the schema, the scam-script and carrier-intel heuristics, the blocklist,
-the concurrency locking, and every external integration against a mocked client — no live
-AWS/AssemblyAI/CALL-E/Twilio/Google/Todoist/WhatsApp credentials needed to run them.
+95 tests, covering the schema, the scam-script and carrier-intel heuristics, the blocklist,
+the concurrency locking, the model-routing fallback logic, and every external integration
+against a mocked client — no live AWS/AssemblyAI/CALL-E/Twilio/Google/Todoist/WhatsApp
+credentials needed to run them.
 
 ## Beyond the demo pipeline: opt-in extensions already built
 
@@ -630,6 +663,10 @@ something it isn't either.
 URL: https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/
 
 - **Public, read-only**: `/` (dashboard), `/api/digest`, `/api/todos`, `/api/blocklist`.
+- **Public, MCP protocol**: `/mcp` (Streamable HTTP — see [Beyond the demo
+  pipeline](#beyond-the-demo-pipeline-opt-in-extensions-already-built)) — read-only tools plus
+  `triage_message`, which decides and reports but never places a real callback or mutates
+  state.
 - **Public, Meta's own auth**: `/webhook` (WhatsApp — verify-token challenge on GET, HMAC
   signature check on POST).
 - **Auth-gated** (`X-API-Key` header): completing a to-do, adding/sending reminders,
