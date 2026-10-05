@@ -14,6 +14,13 @@ def _client(tmp_path, monkeypatch, *, admin_key: str | None = "test-admin-key"):
     monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
     monkeypatch.setattr("callismatic.digest_report.DIGEST_PATH", tmp_path / "digest.json")
     monkeypatch.setattr("callismatic.digest_report.BLOCKLIST_PATH", tmp_path / "blocklist.json")
+    # Without this, /api/reminders/send processed the developer's real outputs/reminders.json
+    # and attempted real WhatsApp deliveries during tests (found 2026-10-05: it only failed
+    # because the local WhatsApp token had expired). Isolate the store AND remove the
+    # credentials, so no test can message a real person even if a path is missed.
+    monkeypatch.setattr("callismatic.reminders.REMINDERS_PATH", tmp_path / "reminders.json")
+    monkeypatch.delenv("WHATSAPP_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("WHATSAPP_PHONE_NUMBER_ID", raising=False)
     monkeypatch.delenv("TODOIST_API_TOKEN", raising=False)
     if admin_key is not None:
         monkeypatch.setenv("ADMIN_API_KEY", admin_key)
