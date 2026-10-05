@@ -59,7 +59,9 @@ def test_get_nebius_model_respects_overrides(monkeypatch):
 
 def test_get_model_returns_router_with_nebius_first_when_set(monkeypatch):
     monkeypatch.setenv("NEBIUS_API_KEY", "test-key-not-real")
-    monkeypatch.setenv("AWS_PROFILE", "axxess-triaxis")
+    # No named AWS profile: CI runners have no ~/.aws config, and building a BedrockModel never
+    # needs credentials until a call is made.
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
     result = models.get_model()
     assert isinstance(result, ModelRouter)
     # Nebius must be the first candidate -- FallbackStrategy tries candidates
@@ -94,7 +96,9 @@ def test_paid_fallback_is_opt_in_and_after_groq(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-key-not-real")
     monkeypatch.setenv("NEBIUS_API_KEY", "test-key-not-real")
     monkeypatch.setenv("CALLISMATIC_PAID_FALLBACK", "1")
-    monkeypatch.setenv("AWS_PROFILE", "axxess-triaxis")
+    # No named AWS profile: CI runners have no ~/.aws config, and building a BedrockModel never
+    # needs credentials until a call is made.
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
     chain = [c.model for c in models.get_model().candidates]
     assert len(chain) == 4
     assert chain[2].client_args["base_url"] == models.NEBIUS_DEFAULT_BASE_URL
