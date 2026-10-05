@@ -184,3 +184,43 @@ def test_find_places_parses_local_results(monkeypatch):
 def test_number_matching_tolerates_formatting():
     assert wi._number_mentioned("+919876543210", "Call us on 098765 43210")
     assert not wi._number_mentioned("+919876543210", "Call us on 080 1234 5678")
+
+
+def test_company_overview_prefers_knowledge_panel_and_shares_the_cached_query(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        wi.httpx, "get",
+        fake_get({"Zomato": {"knowledge_graph": {"title": "Zomato", "description": "Indian food delivery company",
+                                                 "website": "https://www.zomato.com"}}}, calls),
+    )
+    overview = wi.company_overview("Zomato", now=NOW)
+    assert overview == {"name": "Zomato", "description": "Indian food delivery company", "website": "zomato.com"}
+    wi.caller_web_intel("+15550006666", "Zomato", now=NOW)  # company query now served from cache
+    assert [c["q"] for c in calls] == ["Zomato", '"+15550006666"']
+
+
+def test_impersonation_advisory_contradicts_unless_number_is_official(monkeypatch):
+    calls = []
+    trai = {
+        "knowledge_graph": {"title": "Telecom Regulatory Authority of India", "website": "https://www.trai.gov.in/"},
+        "organic_results": [
+            {"title": "TRAI cautions public against fraudulent calls", "link": "https://www.trai.gov.in/notifications",
+             "snippet": "TRAI does not call consumers to disconnect mobile numbers. Beware of fake calls."},
+        ],
+    }
+    monkeypatch.setattr(wi.httpx, "get", fake_get({'"+15550007777"': {}, "TRAI": trai}, calls))
+    report = wi.caller_web_intel("+15550007777", "TRAI", now=NOW)
+    assert "CONTRADICTS" in report and "impersonating TRAI" in report and "trai.gov.in" in report
+
+
+def test_impersonation_advisory_does_not_override_an_official_number(monkeypatch):
+    calls = []
+    bank = {
+        "knowledge_graph": {"title": "Example Bank", "website": "https://examplebank.in", "phone": "+1 555 000 4444"},
+        "organic_results": [{"title": "Beware of fraud calls", "link": "https://examplebank.in/security",
+                             "snippet": "Example Bank never calls asking for your OTP."}],
+    }
+    monkeypatch.setattr(wi.httpx, "get", fake_get({'"+15550004444"': {}, "Example Bank": bank}, calls))
+    report = wi.caller_web_intel("+15550004444", "Example Bank", now=NOW)
+    assert "CORROBORATES" in report and "CONTRADICTS" not in report
+    assert "Public warning about calls impersonating Example Bank" in report  # still shown to the agent

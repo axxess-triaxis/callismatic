@@ -67,6 +67,19 @@ SPAM_REPORT_DOMAINS = (
     "whocalled",
 )
 COMPLAINT_WORDS = ("scam", "fraud", "spam", "complaint", "fake call", "harass")
+# Public advisories that a claimed organisation is commonly impersonated by phone -- e.g.
+# regulators and banks stating they never call to disconnect numbers or ask for OTPs.
+IMPERSONATION_WARNING_WORDS = (
+    "never call",
+    "does not call",
+    "do not call you",
+    "fraudulent call",
+    "fake call",
+    "impersonat",
+    "beware of",
+    "scam call",
+    "fraud call",
+)
 
 JsonObject = dict[str, Any]
 
@@ -246,11 +259,25 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
                 [str(kg.get("phone") or "")]
                 + [f"{r.get('title', '')} {r.get('snippet', '')}" for r in organic if _domain(r.get("link")) == official_site]
             )
-            if official_site and _number_mentioned(phone_number, published):
+            number_published = bool(official_site and _number_mentioned(phone_number, published))
+            if number_published:
                 corroborates.append(f"number is published on {company}'s own listing/site ({official_site})")
             elif kg.get("phone"):
                 lines.append(f"- {company}'s published phone differs from the caller's number "
                              "(not proof of fraud: companies use many numbers).")
+            # Advisories that this organisation is impersonated by phone (e.g. "TRAI never calls
+            # to disconnect numbers"). Only counts against the caller when their number isn't
+            # the organisation's own published one.
+            warnings = [
+                (_domain(r.get("link")), clean_snippet(r.get("snippet"), 140))
+                for r in organic
+                if any(w in f"{r.get('title', '')} {r.get('snippet', '')}".lower() for w in IMPERSONATION_WARNING_WORDS)
+            ]
+            if warnings:
+                domain, snippet = warnings[0]
+                lines.append(f"- Public warning about calls impersonating {company} [{domain}]: {snippet}")
+                if not number_published:
+                    contradicts.append(f"public advisories warn about phone calls impersonating {company} ({domain})")
         except WebIntelUnavailable as exc:
             lines.append(f"- Company search skipped: {exc}.")
 
@@ -266,7 +293,34 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------- news + places
+# ---------------------------------------------------------------- company overview, news, places
+
+def company_overview(company: str, *, now: datetime | None = None) -> JsonObject | None:
+    """A one-line identity for a company from Google's knowledge panel (or top result).
+    Shares caller_web_intel's exact query, so the 24 h cache makes a repeat lookup free.
+    Returns None if nothing usable is found or web intelligence is unavailable."""
+    try:
+        data = serpapi_search({"engine": "google", "q": company.strip(), "num": 10}, now=now)
+    except WebIntelUnavailable:
+        return None
+    kg = data.get("knowledge_graph") or {}
+    organic = data.get("organic_results", [])
+    if kg.get("title"):
+        return {
+            "name": clean_snippet(kg["title"], 80),
+            "description": clean_snippet(kg.get("description") or kg.get("type") or "", 220),
+            "website": _domain(kg.get("website")),
+        }
+    if organic:
+        top = organic[0]
+        return {
+            "name": clean_snippet(top.get("title"), 80),
+            "description": clean_snippet(top.get("snippet"), 220),
+            "website": _domain(top.get("link")),
+        }
+    return None
+
+
 
 def company_news(company: str, n: int = 3, *, now: datetime | None = None) -> list[JsonObject]:
     """Recent news about a company via SerpApi's Google News engine. Returns [] on any failure."""

@@ -21,7 +21,7 @@ def _seed_paths(tmp_path, monkeypatch):
     monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
 
 
-def test_five_tools_are_registered():
+def test_seven_tools_are_registered():
     import asyncio
 
     tools = asyncio.run(mcp_server.mcp.list_tools())
@@ -32,7 +32,20 @@ def test_five_tools_are_registered():
         "list_open_todos",
         "check_caller",
         "triage_message",
+        "company_brief",  # SerpApi (Google Search + Google News)
+        "find_places_near",  # SerpApi (Google Maps)
     }
+
+
+def test_company_brief_and_find_places_near_wrap_serpapi_helpers(monkeypatch):
+    monkeypatch.setattr("callismatic.briefs.brief_for_company", lambda company: f"Brief: {company}")
+    monkeypatch.setattr(
+        "callismatic.web_intel.find_places",
+        lambda query, near: [{"title": "Third Wave Coffee", "rating": 4.4, "reviews": 2100, "address": "Koramangala",
+                              "hours": "", "phone": "", "type": "Coffee shop"}],
+    )
+    assert mcp_server.company_brief("Zomato") == "Brief: Zomato"
+    assert "Third Wave Coffee -- 4.4" in mcp_server.find_places_near("cafe", "Koramangala")
 
 
 def test_get_weekly_digest_wraps_generate_weekly_digest(tmp_path, monkeypatch):

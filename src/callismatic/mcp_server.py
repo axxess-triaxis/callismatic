@@ -128,8 +128,36 @@ def triage_message(text: str, sender: str = "unknown") -> dict:
         "block_recommended": result.triage.block_recommended if result.triage else None,
         "callback_recommended": result.triage.callback_recommended if result.triage else None,
         "urgency": result.triage.urgency if result.triage else None,
+        "web_evidence": result.triage.web_evidence if result.triage else None,
         "error": result.error,
     }
+
+
+@mcp.tool()
+def company_brief(company: str) -> str:
+    """A short brief on an organisation before you meet or call them: who they are
+    (Google's knowledge panel) and their recent news (Google News), via SerpApi.
+
+    Args:
+        company: the organisation's name, e.g. "Zomato".
+    """
+    from callismatic.briefs import brief_for_company
+
+    return brief_for_company(company)
+
+
+@mcp.tool()
+def find_places_near(query: str, near: str) -> str:
+    """Finds places near a location -- a cafe near your next meeting, a pharmacy near
+    home -- with ratings, addresses and hours, via SerpApi's Google Maps engine.
+
+    Args:
+        query: what to look for, e.g. "quiet cafe".
+        near: where, e.g. "Koramangala, Bengaluru".
+    """
+    from callismatic.web_intel import find_places, format_places
+
+    return format_places(find_places(query, near))
 
 
 def build_app(*, stateless: bool = True):
