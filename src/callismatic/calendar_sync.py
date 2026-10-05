@@ -92,6 +92,38 @@ def find_free_slots(
     return slots
 
 
+def list_upcoming_events(*, hours_ahead: int = 24, now: datetime | None = None) -> list[JsonObject]:
+    """Returns events starting in the next `hours_ahead` hours, earliest first, each as
+    {id, summary, start, location, attendee_emails}. Read-only. Recurring events are expanded
+    into their individual occurrences (singleEvents) so a weekly meeting shows up as today's."""
+    now = now or datetime.now(timezone.utc)
+    service = _calendar_service()
+    response = (
+        service.events()
+        .list(
+            calendarId=_calendar_id(),
+            timeMin=now.isoformat(),
+            timeMax=(now + timedelta(hours=hours_ahead)).isoformat(),
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+    events = []
+    for item in response.get("items", []):
+        start = item.get("start", {})
+        events.append(
+            {
+                "id": item.get("id", ""),
+                "summary": item.get("summary", "(no title)"),
+                "start": start.get("dateTime") or start.get("date", ""),
+                "location": item.get("location", ""),
+                "attendee_emails": [a["email"] for a in item.get("attendees", []) if a.get("email")],
+            }
+        )
+    return events
+
+
 def book_meeting(start: datetime, end: datetime, summary: str, *, description: str = "") -> JsonObject:
     """Books a real event on the shared calendar. Returns the created event object."""
     service = _calendar_service()
