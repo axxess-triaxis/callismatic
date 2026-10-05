@@ -182,8 +182,10 @@ def test_find_places_parses_local_results(monkeypatch):
 
 
 def test_number_matching_tolerates_formatting():
-    assert wi._number_mentioned("+919876543210", "Call us on 098765 43210")
-    assert not wi._number_mentioned("+919876543210", "Call us on 080 1234 5678")
+    # Fictional +1555 numbers only -- no real subscriber's number in a public repo.
+    assert wi._number_mentioned("+15550001234", "Call us on (555) 000-1234")
+    assert wi._number_mentioned("+15550001234", "Helpline: 1 555 000 1234")
+    assert not wi._number_mentioned("+15550001234", "Call us on (555) 000-9999")
 
 
 def test_company_overview_prefers_knowledge_panel_and_shares_the_cached_query(monkeypatch):
