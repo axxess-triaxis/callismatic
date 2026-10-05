@@ -57,3 +57,26 @@ def test_book_meeting_calls_events_insert(monkeypatch):
     _, kwargs = fake_service.events.return_value.insert.call_args
     assert kwargs["calendarId"] == "cal-1"
     assert kwargs["body"]["summary"] == "Consultation call"
+
+
+def test_list_upcoming_events_expands_recurring_and_extracts_attendees(monkeypatch):
+    now = datetime(2026, 10, 6, 6, 0, tzinfo=timezone.utc)
+    fake_service = MagicMock()
+    fake_service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            {"id": "e1", "summary": "Partnership call", "start": {"dateTime": "2026-10-06T09:30:00+05:30"},
+             "location": "Koramangala, Bengaluru", "attendees": [{"email": "priya@zomato.com"}, {"displayName": "no email"}]},
+            {"id": "e2", "start": {"date": "2026-10-07"}},
+        ]
+    }
+    monkeypatch.setattr(calendar_sync, "_calendar_service", lambda: fake_service)
+    monkeypatch.setattr(calendar_sync, "_calendar_id", lambda: "cal-1")
+
+    events = calendar_sync.list_upcoming_events(hours_ahead=48, now=now)
+
+    _, kwargs = fake_service.events.return_value.list.call_args
+    assert kwargs["singleEvents"] is True and kwargs["orderBy"] == "startTime"
+    assert kwargs["timeMax"] == "2026-10-08T06:00:00+00:00"
+    assert events[0] == {"id": "e1", "summary": "Partnership call", "start": "2026-10-06T09:30:00+05:30",
+                         "location": "Koramangala, Bengaluru", "attendee_emails": ["priya@zomato.com"]}
+    assert events[1]["summary"] == "(no title)" and events[1]["start"] == "2026-10-07"

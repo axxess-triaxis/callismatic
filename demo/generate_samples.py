@@ -50,6 +50,20 @@ SCRIPTS = {
         "it's okay to leave it at the door next time, or if you'd like us to try again tomorrow "
         "between nine and noon."
     ),
+    # SerpApi India Hackathon 2026 samples: real, public organisations (so web intelligence
+    # has something real to find) but fictional people and fictional +1555 numbers -- no real
+    # person's name or number appears anywhere in the repo or the demo.
+    "trai_disconnection_scam_+15550007777.wav": (
+        "This is a call from TRAI, the Telecom Regulatory Authority of India. Your mobile number "
+        "will be disconnected within two hours because illegal activity has been registered "
+        "against your Aadhaar. To avoid disconnection, press nine now or call this number back "
+        "immediately to speak with our cyber cell officer."
+    ),
+    "zomato_partnership_lead_+15550008888.wav": (
+        "Hi, this is Ananya from Zomato's restaurant partnerships team. We noticed your new cafe "
+        "and would love to talk about listing it on Zomato, with a launch offer for your first "
+        "month. Could you call me back sometime this week? Thanks so much."
+    ),
 }
 
 
