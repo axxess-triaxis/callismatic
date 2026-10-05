@@ -246,16 +246,32 @@ Rules confirmed from serpapi.github.io/serpapi-india-hackathon-2026 (rules.html)
 - **Public repository**: https://github.com/axxess-triaxis/callismatic
 - **AI tools disclosure** (required): Claude Code (Anthropic) was used to design and write the
   SerpApi integration, tests and documentation, under the founder's direction and review.
-  Callismatic's runtime agent uses the Strands Agents SDK on Amazon Bedrock (Amazon Nova).
+  Callismatic's runtime agent uses the Strands Agents SDK on Amazon Bedrock (Amazon Nova
+  Pro), or on Nebius Token Factory (NVIDIA Nemotron) with Bedrock as fallback when a Nebius
+  key is configured.
 
 ### Demo video script (under 3 minutes, recorded running locally)
 
 Use only the sample voicemails: they feature fictional people and fictional `+1555…`
 numbers. Never show `.env`, a terminal with `SERPAPI_API_KEY`, or a real person's number.
 
+**Before recording (off camera), in PowerShell from the repo folder:**
+
+```powershell
+aws login                                   # Bedrock session for the triage agent
+$env:NEBIUS_API_KEY = ""                    # this session only: use Bedrock (Nova), not Nebius
+mkdir ..\serpapi-demo -Force; copy sample_voicemails\trai_* ..\serpapi-demo; copy sample_voicemails\zomato_* ..\serpapi-demo
+python -m callismatic.cli ..\serpapi-demo --no-callbacks   # dry run: warms the search cache
+```
+
+`python -m callismatic.cli` is the same program as the `callismatic` command; use it if
+`callismatic` isn't on your PATH. Triage on the Nebius model took 418 s for these two
+voicemails in testing, too slow to show live, so record on Bedrock or cut the wait.
+`--no-callbacks` keeps the run from placing a real phone call to the fictional numbers.
+
 1. **0:00–0:20, the problem.** Unknown calls are mostly scams, so people block them, and then
    miss real clients, deliveries and leads. Callismatic answers them for you.
-2. **0:20–1:20, caller verification.** Run `callismatic triage sample_voicemails` and show:
+2. **0:20–1:20, caller verification.** Run `python -m callismatic.cli ..\serpapi-demo --no-callbacks` and show:
    - the **TRAI disconnection scam** blocked. Point out `web_evidence`: TRAI is real, its
      official site is trai.gov.in, and the caller's number appears nowhere on it. The block
      itself rests on the transcript's scam markers; the web evidence supports it, never
@@ -263,12 +279,12 @@ numbers. Never show `.env`, a terminal with `SERPAPI_API_KEY`, or a real person'
    - the **Zomato partnerships lead** *not* blocked: the web confirms Zomato is a real
      company (official site zomato.com), so it becomes a lead to call back.
 3. **1:20–1:40, the evidence itself.** Run
-   `callismatic web-intel --phone +15550007777 --company TRAI` to show the raw web evidence
+   `python -m callismatic.cli web-intel --phone +15550007777 --company TRAI` to show the raw web evidence
    and the untrusted-content header.
-4. **1:40–2:20, briefs.** Run `callismatic brief --company Zomato` to show the knowledge-panel
+4. **1:40–2:20, briefs.** Run `python -m callismatic.cli brief --company Zomato` to show the knowledge-panel
    summary and the latest Google News headlines. Mention that with Google Calendar it does
    this automatically 30 minutes before each meeting, over WhatsApp.
-5. **2:20–2:45, places.** Run `callismatic places "quiet cafe" --near "Koramangala, Bengaluru"`.
+5. **2:20–2:45, places.** Run `python -m callismatic.cli places "quiet cafe" --near "Koramangala, Bengaluru"`.
 6. **2:45–3:00, close.** Three SerpApi engines feed one agent's real decisions. It's open
    source, and the repo link is in the description.
 

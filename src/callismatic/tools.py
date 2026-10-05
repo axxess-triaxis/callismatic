@@ -17,6 +17,7 @@ reasoning. This mirrors the confirm-before-critical-action pattern.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from datetime import date, datetime, timezone
 
@@ -53,13 +54,34 @@ _SCAM_MARKERS: dict[str, list[str]] = {
         "legal action",
         "within 24 hours",
         "within twenty four hours",
+        # Indian scam scripts: SIM/number "disconnection" and "digital arrest" pressure.
+        "will be disconnected",
+        "within two hours",
+        "within 2 hours",
+        "press nine now",
+        "press 9 now",
+        "digital arrest",
     ],
     "government/agency impersonation": [
         "irs",
         "social security administration",
         "federal fraud",
         "medicare fraud department",
+        # India: regulators and police units commonly impersonated by phone. TRAI publicly
+        # states it never calls consumers to disconnect numbers.
+        "trai",
+        "telecom regulatory authority",
+        "cyber cell",
+        "cyber crime branch",
+        "against your aadhaar",
+        "cbi officer",
     ],
+}
+
+# Whole-word matching: plain substring matching flagged "your first month" as the IRS.
+_MARKER_PATTERNS: dict[str, re.Pattern[str]] = {
+    label: re.compile(r"\b(?:" + "|".join(re.escape(p) for p in phrases) + r")\b")
+    for label, phrases in _SCAM_MARKERS.items()
 }
 
 
@@ -114,8 +136,8 @@ def check_number_intel(transcript_excerpt: str) -> str:
     text_lower = transcript_excerpt.lower()
     found = [
         label
-        for label, phrases in _SCAM_MARKERS.items()
-        if any(phrase in text_lower for phrase in phrases)
+        for label, pattern in _MARKER_PATTERNS.items()
+        if pattern.search(text_lower)
     ]
     if not found:
         return "No scam-script markers found in the transcript."
