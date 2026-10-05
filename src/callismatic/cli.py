@@ -28,6 +28,12 @@ from callismatic.triage import DEFAULT_MAX_CONCURRENCY, triage_inbox, triage_inb
 URGENCY_MARKERS = {"none": "", "low": "[low]", "medium": "[MEDIUM]", "high": "[HIGH]"}
 
 
+def _web_evidence_line(r) -> str | None:
+    # What SerpApi contributed to this decision (schema.CallTriage.web_evidence). Set only when the
+    # agent actually ran check_web_intel, so most voicemails print nothing here.
+    return f"  Web evidence (SerpApi): {r.triage.web_evidence}" if r.triage.web_evidence else None
+
+
 def _print_report(results):
     ok = [r for r in results if r.error is None]
     needs_action = [r for r in ok if r.triage.needs_decision]
@@ -57,6 +63,8 @@ def _print_report(results):
             print(f"  Summary: {r.triage.summary}")
             print(f"  Why: {r.triage.decision_reason}")
             print(f"  Suggested action: {r.triage.suggested_action}")
+            if line := _web_evidence_line(r):
+                print(line)
 
     if callback_decided:
         print("\n" + "=" * 60)
@@ -74,6 +82,9 @@ def _print_report(results):
 
     if blocked:
         print("\nBlocked: " + ", ".join(f"{r.caller_number} ({r.file_name})" for r in blocked))
+        for r in blocked:
+            if line := _web_evidence_line(r):
+                print(f"  {r.caller_number}:{line[1:]}")
 
     if errors:
         print("\n" + "=" * 60)

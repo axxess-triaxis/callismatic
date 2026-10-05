@@ -265,15 +265,15 @@ python -m callismatic.cli ..\serpapi-demo --no-callbacks   # dry run: warms the 
 
 `python -m callismatic.cli` is the same program as the `callismatic` command; use it if
 `callismatic` isn't on your PATH. On Groq (gpt-oss-120b, free tier) the two voicemails took
-65–108 s across test runs, including transcription. Run them one at a time (no `--concurrent`): the free
-tier allows 8,000 tokens a minute, and parallel runs hit that limit and slow down. Wait a
-minute after the dry run before recording.
-`--no-callbacks` keeps the run from placing a real phone call to the fictional numbers.
+65–141 s across test runs, including transcription, so the triage step won't fit its slot live:
+let it run, then cut the waiting in editing (never speed up or edit the output itself). Run them
+one at a time (no `--concurrent`): the free tier allows 8,000 tokens a minute, and parallel runs
+hit that limit and slow down. Wait a minute after the dry run before recording.
 
 1. **0:00–0:20, the problem.** Unknown calls are mostly scams, so people block them, and then
    miss real clients, deliveries and leads. Callismatic answers them for you.
 2. **0:20–1:20, caller verification.** Run `python -m callismatic.cli ..\serpapi-demo --no-callbacks` and show:
-   - the **TRAI disconnection scam** blocked. Point out `web_evidence`: TRAI is real, its
+   - the **TRAI disconnection scam** blocked. Point out its `Web evidence (SerpApi)` line: TRAI is real, its
      official site is trai.gov.in, and the caller's number appears nowhere on it. The block
      itself rests on the transcript's scam markers; the web evidence supports it, never
      decides it alone;
