@@ -246,9 +246,9 @@ Rules confirmed from serpapi.github.io/serpapi-india-hackathon-2026 (rules.html)
 - **Public repository**: https://github.com/axxess-triaxis/callismatic
 - **AI tools disclosure** (required): Claude Code (Anthropic) was used to design and write the
   SerpApi integration, tests and documentation, under the founder's direction and review.
-  Callismatic's runtime agent uses the Strands Agents SDK on Amazon Bedrock (Amazon Nova
-  Pro), or on Nebius Token Factory (NVIDIA Nemotron) with Bedrock as fallback when a Nebius
-  key is configured.
+  Callismatic's runtime agent uses the Strands Agents SDK. The demo runs on Groq's free tier
+  (OpenAI gpt-oss-120b, falling back to gpt-oss-20b); Amazon Bedrock (Nova Pro) and Nebius
+  Token Factory (NVIDIA Nemotron) remain supported as opt-in fallbacks.
 
 ### Demo video script (under 3 minutes, recorded running locally)
 
@@ -258,15 +258,16 @@ numbers. Never show `.env`, a terminal with `SERPAPI_API_KEY`, or a real person'
 **Before recording (off camera), in PowerShell from the repo folder:**
 
 ```powershell
-aws login                                   # Bedrock session for the triage agent
-$env:NEBIUS_API_KEY = ""                    # this session only: use Bedrock (Nova), not Nebius
+# GROQ_API_KEY and SERPAPI_API_KEY must be in .env (free tiers, no card). No AWS login needed.
 mkdir ..\serpapi-demo -Force; copy sample_voicemails\trai_* ..\serpapi-demo; copy sample_voicemails\zomato_* ..\serpapi-demo
 python -m callismatic.cli ..\serpapi-demo --no-callbacks   # dry run: warms the search cache
 ```
 
 `python -m callismatic.cli` is the same program as the `callismatic` command; use it if
-`callismatic` isn't on your PATH. Triage on the Nebius model took 418 s for these two
-voicemails in testing, too slow to show live, so record on Bedrock or cut the wait.
+`callismatic` isn't on your PATH. On Groq (gpt-oss-120b, free tier) the two voicemails took
+65–108 s across test runs, including transcription. Run them one at a time (no `--concurrent`): the free
+tier allows 8,000 tokens a minute, and parallel runs hit that limit and slow down. Wait a
+minute after the dry run before recording.
 `--no-callbacks` keeps the run from placing a real phone call to the fictional numbers.
 
 1. **0:00–0:20, the problem.** Unknown calls are mostly scams, so people block them, and then
@@ -277,7 +278,8 @@ voicemails in testing, too slow to show live, so record on Bedrock or cut the wa
      itself rests on the transcript's scam markers; the web evidence supports it, never
      decides it alone;
    - the **Zomato partnerships lead** *not* blocked: the web confirms Zomato is a real
-     company (official site zomato.com), so it becomes a lead to call back.
+     company (official site zomato.com), so it becomes a lead, escalated to you with a
+     suggested callback (or an automatic callback, depending on the run).
 3. **1:20–1:40, the evidence itself.** Run
    `python -m callismatic.cli web-intel --phone +15550007777 --company TRAI` to show the raw web evidence
    and the untrusted-content header.
