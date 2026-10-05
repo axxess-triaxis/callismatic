@@ -198,7 +198,8 @@ def test_company_overview_prefers_knowledge_panel_and_shares_the_cached_query(mo
     overview = wi.company_overview("Zomato", now=NOW)
     assert overview == {"name": "Zomato", "description": "Indian food delivery company", "website": "zomato.com"}
     wi.caller_web_intel("+15550006666", "Zomato", now=NOW)  # company query now served from cache
-    assert [c["q"] for c in calls] == ["Zomato", '"+15550006666"']
+    # company query served from cache; the number search and the official-site check are new
+    assert [c["q"] for c in calls] == ["Zomato", '"+15550006666"', '"+15550006666" site:zomato.com']
 
 
 def test_impersonation_advisory_contradicts_unless_number_is_official(monkeypatch):
@@ -226,3 +227,59 @@ def test_impersonation_advisory_does_not_override_an_official_number(monkeypatch
     report = wi.caller_web_intel("+15550004444", "Example Bank", now=NOW)
     assert "CORROBORATES" in report and "CONTRADICTS" not in report
     assert "Public warning about calls impersonating Example Bank" in report  # still shown to the agent
+
+
+def test_searches_are_localised_to_india_by_default(monkeypatch):
+    # Regression: with no gl, SerpApi returned US results -- "TRAI" was a SoundCloud musician.
+    calls = []
+    monkeypatch.setattr(wi.httpx, "get", fake_get({}, calls))
+    wi.caller_web_intel("+15550001111", "TRAI", now=NOW)
+    assert all(c["gl"] == "in" and c["hl"] == "en" for c in calls)
+    monkeypatch.setenv("SERPAPI_GL", "us")
+    wi.serpapi_search(wi._google("x"), now=NOW)
+    assert calls[-1]["gl"] == "us"
+
+
+def test_official_site_is_the_namesake_domain_not_the_top_result(monkeypatch):
+    # Live shape: no website in the knowledge panel, a namesake ranks first, the regulator's
+    # own subdomain lower down.
+    calls = []
+    trai = {
+        "knowledge_graph": {"title": "Telecom Regulatory Authority of India"},
+        "organic_results": [
+            {"title": "Trai", "link": "https://soundcloud.com/therealtrai", "snippet": "music"},
+            {"title": "About TRAI", "link": "https://trsp.trai.gov.in/about", "snippet": "Established in 1997."},
+        ],
+    }
+    monkeypatch.setattr(wi.httpx, "get", fake_get({"TRAI": trai}, calls))
+    report = wi.caller_web_intel("+15550007777", "TRAI", now=NOW)
+    assert "official site: trai.gov.in" in report and "soundcloud" not in report.split("Company")[1]
+    assert calls[-1]["q"] == '"+15550007777" site:trai.gov.in'
+
+
+def test_number_found_on_official_site_by_targeted_search_corroborates(monkeypatch):
+    calls = []
+    responses = {
+        "Zomato": {"organic_results": [{"title": "Zomato", "link": "https://www.zomato.com/", "snippet": "Order food"}]},
+        '"+15550006666" site:zomato.com': {"organic_results": [{"title": "Partner support", "link": "https://www.zomato.com/partners"}]},
+    }
+    monkeypatch.setattr(wi.httpx, "get", fake_get(responses, calls))
+    assert "CORROBORATES" in wi.caller_web_intel("+15550006666", "Zomato", now=NOW)
+
+
+def test_overview_without_panel_or_own_site_is_none_not_a_random_article(monkeypatch):
+    calls = []
+    news = {"organic_results": [{"title": "Zomato charges COD fee", "link": "https://inc42.com/buzz/x", "snippet": "..."}]}
+    monkeypatch.setattr(wi.httpx, "get", fake_get({"Zomato": news}, calls))
+    assert wi.company_overview("Zomato", now=NOW) is None
+
+
+def test_empty_result_page_is_no_results_not_an_error(monkeypatch):
+    # Live shape: SerpApi returns {"error": "Google hasn't returned any results for this query."}
+    calls = []
+    empty = {"error": "Google hasn't returned any results for this query."}
+    monkeypatch.setattr(wi.httpx, "get", fake_get({'"+15550008888"': empty}, calls))
+    report = wi.caller_web_intel("+15550008888", now=NOW)
+    assert "no web results" in report and "skipped" not in report and "INCONCLUSIVE" in report
+    wi.caller_web_intel("+15550008888", now=NOW)
+    assert len(calls) == 1  # the empty answer is cached like any other

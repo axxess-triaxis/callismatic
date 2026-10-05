@@ -164,7 +164,11 @@ def serpapi_search(params: JsonObject, *, now: datetime | None = None, http_get=
         # contains the API key.
         raise WebIntelUnavailable(f"SerpApi HTTP {response.status_code}")
     data = response.json()
-    if data.get("error"):
+    if "hasn't returned any results" in str(data.get("error", "")):
+        # SerpApi reports an empty result page as an "error"; for us it's an answer -- the
+        # search ran and found nothing -- so treat it (and cache it) as no results.
+        data = {"organic_results": [], "search_metadata": data.get("search_metadata", {})}
+    elif data.get("error"):
         raise WebIntelUnavailable(f"SerpApi error: {str(data['error'])[:120]}")
 
     with _cache_lock:
@@ -184,6 +188,40 @@ def _domain(url: str | None) -> str:
         return ""
     host = urlparse(url).netloc.lower()
     return host[4:] if host.startswith("www.") else host
+
+
+_TWO_LABEL_SUFFIXES = ("gov.in", "co.in", "org.in", "net.in", "ac.in", "nic.in", "co.uk", "org.uk", "com.au")
+
+
+def _registrable(domain: str) -> str:
+    """trsp.trai.gov.in -> trai.gov.in, m.zomato.com -> zomato.com (good enough, no PSL)."""
+    labels = domain.split(".")
+    keep = 3 if any(domain.endswith("." + s) for s in _TWO_LABEL_SUFFIXES) else 2
+    return ".".join(labels[-keep:])
+
+
+def _country() -> str:
+    # Localise Google results. Without it SerpApi defaults to US results, where "TRAI" is a
+    # musician and Zomato has no knowledge panel -- found in the first live run.
+    return os.environ.get("SERPAPI_GL", "in").strip().lower() or "in"
+
+
+def _google(q: str) -> JsonObject:
+    return {"engine": "google", "q": q, "num": 10, "gl": _country(), "hl": "en"}
+
+
+def _official_site(company: str, kg: JsonObject, organic: list[JsonObject]) -> str:
+    """The organisation's own domain: the knowledge panel's website if Google gives one, else
+    the first result whose domain carries the organisation's name (TRAI -> trai.gov.in).
+    Never just "whatever ranked first" -- that was a news article or a namesake's page."""
+    if kg.get("website"):
+        return _registrable(_domain(kg["website"]))
+    tokens = {t for t in re.findall(r"[a-z0-9]+", f"{company} {kg.get('title', '')}".lower()) if len(t) >= 3}
+    for r in organic:
+        site = _registrable(_domain(r.get("link")))
+        if site and site.split(".")[0] in tokens:
+            return site
+    return ""
 
 
 def clean_snippet(text: str | None, limit: int = SNIPPET_LIMIT) -> str:
@@ -225,7 +263,7 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
 
     # 1) The number itself.
     try:
-        data = serpapi_search({"engine": "google", "q": f'"{phone_number}"', "num": 10}, now=now)
+        data = serpapi_search(_google(f'"{phone_number}"'), now=now)
         results = data.get("organic_results", [])[:5]
         if not results:
             lines.append(f'- Search for "{phone_number}": no web results.')
@@ -243,23 +281,33 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
     if company and company.strip():
         company = company.strip()
         try:
-            data = serpapi_search({"engine": "google", "q": company, "num": 10}, now=now)
+            data = serpapi_search(_google(company), now=now)
             kg = data.get("knowledge_graph") or {}
-            organic = data.get("organic_results", [])[:5]
-            official_site = _domain(kg.get("website")) or (_domain(organic[0].get("link")) if organic else "")
+            organic = data.get("organic_results", [])[:10]
+            official_site = _official_site(company, kg, organic)
             if kg.get("title"):
                 desc = clean_snippet(kg.get("description") or kg.get("type") or "")
                 lines.append(f'- Company "{company}": knowledge panel "{clean_snippet(kg["title"], 80)}"'
                              f"{f' -- {desc}' if desc else ''}; official site: {official_site or 'unknown'}.")
             elif organic:
-                lines.append(f'- Company "{company}": no knowledge panel; top result {official_site}.')
+                lines.append(f'- Company "{company}": no knowledge panel; official site: {official_site or "not identified"}.')
             else:
                 contradicts.append(f'no web presence found for the claimed company "{company}"')
             published = " ".join(
                 [str(kg.get("phone") or "")]
-                + [f"{r.get('title', '')} {r.get('snippet', '')}" for r in organic if _domain(r.get("link")) == official_site]
+                + [f"{r.get('title', '')} {r.get('snippet', '')}" for r in organic if _registrable(_domain(r.get("link"))) == official_site]
             )
             number_published = bool(official_site and _number_mentioned(phone_number, published))
+            if official_site and not number_published:
+                # A targeted check of the organisation's own site: does it publish this number
+                # anywhere? Top-10 snippets for the name rarely show contact pages.
+                try:
+                    hits = serpapi_search(_google(f'"{phone_number}" site:{official_site}'), now=now)
+                    number_published = bool(hits.get("organic_results"))
+                    if not number_published:
+                        lines.append(f"- The caller's number does not appear anywhere on {official_site}.")
+                except WebIntelUnavailable as exc:
+                    lines.append(f"- Official-site number check skipped: {exc}.")
             if number_published:
                 corroborates.append(f"number is published on {company}'s own listing/site ({official_site})")
             elif kg.get("phone"):
@@ -296,36 +344,37 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
 # ---------------------------------------------------------------- company overview, news, places
 
 def company_overview(company: str, *, now: datetime | None = None) -> JsonObject | None:
-    """A one-line identity for a company from Google's knowledge panel (or top result).
-    Shares caller_web_intel's exact query, so the 24 h cache makes a repeat lookup free.
-    Returns None if nothing usable is found or web intelligence is unavailable."""
+    """A one-line identity for a company from Google's knowledge panel, else from its own
+    site's result. Shares caller_web_intel's exact query, so the 24 h cache makes a repeat
+    lookup free. Returns None if nothing usable is found or web intelligence is unavailable --
+    never a stranger's page dressed up as the company."""
     try:
-        data = serpapi_search({"engine": "google", "q": company.strip(), "num": 10}, now=now)
+        data = serpapi_search(_google(company.strip()), now=now)
     except WebIntelUnavailable:
         return None
     kg = data.get("knowledge_graph") or {}
-    organic = data.get("organic_results", [])
+    organic = data.get("organic_results", [])[:10]
+    website = _official_site(company, kg, organic)
     if kg.get("title"):
         return {
             "name": clean_snippet(kg["title"], 80),
             "description": clean_snippet(kg.get("description") or kg.get("type") or "", 220),
-            "website": _domain(kg.get("website")),
+            "website": website,
         }
-    if organic:
-        top = organic[0]
+    own = next((r for r in organic if website and _registrable(_domain(r.get("link"))) == website), None)
+    if own:
         return {
-            "name": clean_snippet(top.get("title"), 80),
-            "description": clean_snippet(top.get("snippet"), 220),
-            "website": _domain(top.get("link")),
+            "name": clean_snippet(own.get("title"), 80),
+            "description": clean_snippet(own.get("snippet"), 220),
+            "website": website,
         }
     return None
-
 
 
 def company_news(company: str, n: int = 3, *, now: datetime | None = None) -> list[JsonObject]:
     """Recent news about a company via SerpApi's Google News engine. Returns [] on any failure."""
     try:
-        data = serpapi_search({"engine": "google_news", "q": company, "gl": "in", "hl": "en"}, now=now)
+        data = serpapi_search({"engine": "google_news", "q": company, "gl": _country(), "hl": "en"}, now=now)
     except WebIntelUnavailable:
         return []
     out: list[JsonObject] = []

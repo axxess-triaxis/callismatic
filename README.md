@@ -556,14 +556,20 @@ world** says about them. It's used in three places, all opt-in via `SERPAPI_API_
 
 **Caller verification.** When a caller claims an organisation ("this is Ananya from Zomato",
 "this is TRAI"), the agent calls `check_web_intel(phone_number, company)`. It runs at most
-two searches, then reports one overall signal with the evidence behind it:
+three searches (the number; the organisation, to find its official site; and the number on
+that site), localised to India by default (`SERPAPI_GL`), then reports one overall signal with
+the evidence behind it:
 
 - **CORROBORATES**: the caller's number is published on the claimed organisation's own site
   or listing.
 - **CONTRADICTS**: the number appears on scam-report or complaint pages; the claimed
-  organisation doesn't exist on the web; or that organisation publicly warns about calls
-  impersonating it (e.g. "TRAI does not call to disconnect numbers").
-- **INCONCLUSIVE**: nothing on the web confirms or contradicts the caller.
+  organisation doesn't exist on the web; or a public advisory warning about calls
+  impersonating it appears in the results (e.g. "TRAI does not call to disconnect numbers").
+  In live testing such advisories rarely rank for the organisation's name, so don't rely on
+  this one.
+- **INCONCLUSIVE**: nothing on the web confirms or contradicts the caller. The report still
+  carries the facts found, e.g. *"official site: trai.gov.in; the caller's number does not
+  appear anywhere on trai.gov.in"*, for the agent to weigh against the transcript.
 
 The signal is recorded on the decision as `web_evidence`, so every digest entry shows what the
 web contributed.

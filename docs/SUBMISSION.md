@@ -225,10 +225,10 @@ Rules confirmed from serpapi.github.io/serpapi-india-hackathon-2026 (rules.html)
     agent's `check_web_intel` tool searches Google (via SerpApi) for the number and the
     organisation. The result is one of three signals:
     - **corroborated**: the number is published on that organisation's own site;
-    - **contradicted**: the number appears on scam-report pages, the organisation doesn't
-      exist, or it publicly warns that it never makes such calls (e.g. TRAI and "your number
-      will be disconnected" calls);
-    - **inconclusive**.
+    - **contradicted**: the number appears on scam-report pages, or the organisation
+      doesn't exist;
+    - **inconclusive**, still carrying the facts found: the organisation's official site and
+      whether the caller's number appears on it.
     That evidence feeds the block / callback / escalate decision and is recorded with it.
   - **What should I know before this meeting?** For upcoming calendar meetings, Callismatic
     identifies the organisation (from attendee email domains) and sends a WhatsApp brief 30
@@ -256,10 +256,12 @@ numbers. Never show `.env`, a terminal with `SERPAPI_API_KEY`, or a real person'
 1. **0:00–0:20, the problem.** Unknown calls are mostly scams, so people block them, and then
    miss real clients, deliveries and leads. Callismatic answers them for you.
 2. **0:20–1:20, caller verification.** Run `callismatic triage sample_voicemails` and show:
-   - the **TRAI disconnection scam** blocked. Point out `web_evidence`: TRAI publicly warns
-     it never makes these calls, on top of the transcript's scam markers;
-   - the **Zomato partnerships lead** *not* blocked: Zomato is a real company, so it becomes
-     a lead to call back.
+   - the **TRAI disconnection scam** blocked. Point out `web_evidence`: TRAI is real, its
+     official site is trai.gov.in, and the caller's number appears nowhere on it. The block
+     itself rests on the transcript's scam markers; the web evidence supports it, never
+     decides it alone;
+   - the **Zomato partnerships lead** *not* blocked: the web confirms Zomato is a real
+     company (official site zomato.com), so it becomes a lead to call back.
 3. **1:20–1:40, the evidence itself.** Run
    `callismatic web-intel --phone +15550007777 --company TRAI` to show the raw web evidence
    and the untrusted-content header.
