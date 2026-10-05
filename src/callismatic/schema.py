@@ -61,5 +61,6 @@ class CallTriage(BaseModel):
     web_evidence: str | None = Field(
         default=None,
         description="If check_web_intel was used, one sentence naming the web signal "
-        "(corroborates / contradicts / inconclusive) and what it was based on; otherwise null",
+        "(corroborates / contradicts / inconclusive) and the concrete facts it was based on, "
+        "e.g. the official site found and whether the caller's number appears on it; otherwise null",
     )
