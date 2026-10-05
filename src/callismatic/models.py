@@ -1,5 +1,11 @@
 """Picks the model provider(s) Strands should run on.
 
+Groq comes first when GROQ_API_KEY is set: free tier, no card, fast enough to triage a
+voicemail in seconds, with native tool calling. Its default chain is free-only --
+gpt-oss-120b, then gpt-oss-20b (separate per-model rate limits) -- and the paid providers
+below join the chain only with CALLISMATIC_PAID_FALLBACK=1. Without a Groq key, everything
+below behaves exactly as before.
+
 Bedrock is the default and the always-on safety net -- this project targets
 an AWS-sponsored hackathon and Bedrock is the AWS-native path. Model access
 for the chosen model must be enabled in the AWS console for the target
@@ -25,6 +31,11 @@ import boto3
 from strands.models import BedrockModel, Model
 from strands.models.openai import OpenAIModel
 from strands.models.routing import FallbackStrategy, ModelRouter
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+# Confirmed live against Groq's /models listing (2026-10-05), not assumed.
+GROQ_DEFAULT_MODEL_ID = "openai/gpt-oss-120b"
+GROQ_DEFAULT_FALLBACK_MODEL_ID = "openai/gpt-oss-20b"
 
 NEBIUS_DEFAULT_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 # Nemotron 3 Nano, not Super or Ultra -- deliberately, the same reasoning
@@ -92,7 +103,43 @@ def get_nebius_model() -> OpenAIModel | None:
     )
 
 
+def _groq(model_id: str, api_key: str) -> OpenAIModel:
+    # max_tokens 2000, not Nebius's 8000: Groq's free tier allows 8,000 tokens per minute per
+    # model (confirmed from its x-ratelimit headers, 2026-10-05), so a large max_tokens leaves
+    # no room for a second call within the minute and runs straight into 429s.
+    return OpenAIModel(
+        client_args={"base_url": os.environ.get("GROQ_BASE_URL", GROQ_BASE_URL), "api_key": api_key},
+        model_id=model_id,
+        params={"max_tokens": int(os.environ.get("GROQ_MAX_TOKENS", "2000")), "temperature": 0.2},
+    )
+
+
+def get_groq_models() -> list[OpenAIModel]:
+    """The free Groq chain (primary, then fallback model), or [] if GROQ_API_KEY isn't set.
+    GROQ_FALLBACK_MODEL_ID="" drops the fallback."""
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return []
+    ids = [
+        os.environ.get("GROQ_MODEL_ID", GROQ_DEFAULT_MODEL_ID),
+        os.environ.get("GROQ_FALLBACK_MODEL_ID", GROQ_DEFAULT_FALLBACK_MODEL_ID),
+    ]
+    return [_groq(model_id, api_key) for model_id in dict.fromkeys(i for i in ids if i)]
+
+
+def _paid_fallback_enabled() -> bool:
+    return os.environ.get("CALLISMATIC_PAID_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+
+
 def get_model() -> Model:
+    groq = get_groq_models()
+    if groq:
+        chain: list[Model] = list(groq)
+        if _paid_fallback_enabled():
+            nebius = get_nebius_model()
+            chain += ([nebius] if nebius else []) + [get_bedrock_model()]
+        return chain[0] if len(chain) == 1 else ModelRouter(models=chain, strategy=FallbackStrategy())
+
     bedrock = get_bedrock_model()
     nebius = get_nebius_model()
     if nebius is None:

@@ -597,6 +597,19 @@ The demo inbox includes two samples for this: a **TRAI disconnection scam** and 
 partnerships lead**. Both use real public organisations but fictional people and fictional
 `+1555…` numbers.
 
+## Free models: Groq by default
+
+With `GROQ_API_KEY` set (free tier, no card), the triage agent runs on Groq: OpenAI's
+open-weight **gpt-oss-120b**, falling back to **gpt-oss-20b** if the first is rate-limited or
+down. That chain is free-only. Nebius and Bedrock join it only with `CALLISMATIC_PAID_FALLBACK=1`,
+and without a Groq key the model choice is exactly as before.
+
+Measured on the two SerpApi demo voicemails (2026-10-05): **65–108 s** end to end on Groq (3 runs),
+transcription included, against 418 s on Nebius Nemotron Nano, with the same decisions.
+
+The free tier allows 8,000 tokens a minute per model, so `GROQ_MAX_TOKENS` defaults to 2000.
+Triage voicemails one at a time: `--concurrent` hits the per-minute limit and is slower.
+
 ## Beyond the demo pipeline: opt-in extensions already built
 
 Everything below is off by default — unset credentials, unchanged behavior. Each is a real,

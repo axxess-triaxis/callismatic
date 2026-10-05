@@ -1,8 +1,17 @@
+import pytest
 from strands.models import BedrockModel
 from strands.models.openai import OpenAIModel
 from strands.models.routing import ModelRouter
 
 from callismatic import models
+
+
+@pytest.fixture(autouse=True)
+def no_groq_by_default(monkeypatch):
+    # The pre-Groq tests below describe behaviour without a Groq key; a real key in the
+    # developer's shell must not change what they test.
+    for name in ("GROQ_API_KEY", "GROQ_MODEL_ID", "GROQ_FALLBACK_MODEL_ID", "CALLISMATIC_PAID_FALLBACK"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_get_model_returns_plain_bedrock_when_nebius_unset(monkeypatch):
@@ -61,3 +70,32 @@ def test_get_model_returns_router_with_nebius_first_when_set(monkeypatch):
     assert len(result.candidates) == 2
     assert isinstance(result.candidates[0].model, OpenAIModel)
     assert isinstance(result.candidates[1].model, BedrockModel)
+
+
+def test_groq_is_free_only_by_default(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("NEBIUS_API_KEY", "test-key-not-real")  # present, but paid: not used
+    result = models.get_model()
+    assert isinstance(result, ModelRouter)
+    chain = [c.model for c in result.candidates]
+    assert [m.config["model_id"] for m in chain] == ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+    assert all(m.client_args["base_url"] == models.GROQ_BASE_URL for m in chain)
+    assert not any(isinstance(m, BedrockModel) for m in chain)
+
+
+def test_groq_single_model_when_fallback_disabled(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("GROQ_FALLBACK_MODEL_ID", "")
+    result = models.get_model()
+    assert isinstance(result, OpenAIModel) and result.config["model_id"] == "openai/gpt-oss-120b"
+
+
+def test_paid_fallback_is_opt_in_and_after_groq(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("NEBIUS_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("CALLISMATIC_PAID_FALLBACK", "1")
+    monkeypatch.setenv("AWS_PROFILE", "axxess-triaxis")
+    chain = [c.model for c in models.get_model().candidates]
+    assert len(chain) == 4
+    assert chain[2].client_args["base_url"] == models.NEBIUS_DEFAULT_BASE_URL
+    assert isinstance(chain[3], BedrockModel)

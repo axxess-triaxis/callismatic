@@ -260,6 +260,7 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
     lines: list[str] = [UNTRUSTED_HEADER]
     corroborates: list[str] = []
     contradicts: list[str] = []
+    facts: list[str] = []  # neutral findings, carried into an INCONCLUSIVE verdict line
 
     # 1) The number itself.
     try:
@@ -306,6 +307,8 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
                     number_published = bool(hits.get("organic_results"))
                     if not number_published:
                         lines.append(f"- The caller's number does not appear anywhere on {official_site}.")
+                        facts.append(f"{company} is real (official site {official_site}) but the caller's "
+                                     f"number does not appear on it")
                 except WebIntelUnavailable as exc:
                     lines.append(f"- Official-site number check skipped: {exc}.")
             if number_published:
@@ -336,7 +339,7 @@ def caller_web_intel(phone_number: str, company: str | None = None, *, now: date
     elif corroborates and contradicts:
         verdict = "MIXED: " + "; ".join(corroborates + contradicts)
     else:
-        verdict = "INCONCLUSIVE: nothing on the web confirms or contradicts this caller"
+        verdict = "INCONCLUSIVE: " + ("; ".join(facts) if facts else "nothing on the web confirms or contradicts this caller")
     lines.append(f"Overall web signal: {verdict}. Evidence to weigh with the other checks -- never a verdict on its own.")
     return "\n".join(lines)
 
