@@ -249,10 +249,26 @@ def _run_reminders(argv: list[str]) -> None:
     print(f"Sent {len(sent)} due reminder(s)." if sent else "No reminders due.")
 
 
+def _run_web_intel(argv: list[str]) -> None:
+    """Runs the same web check the triage agent's check_web_intel tool runs, standalone --
+    for seeing exactly what evidence a caller would produce, without a Bedrock call."""
+    from callismatic.web_intel import caller_web_intel, searches_used_today
+
+    parser = argparse.ArgumentParser(prog="callismatic web-intel", description="Web check a caller via SerpApi.")
+    parser.add_argument("--phone", required=True, help="Caller number, E.164 (e.g. +15550001111)")
+    parser.add_argument("--company", default="", help="Organisation the caller claimed to represent")
+    args = parser.parse_args(argv)
+
+    print(caller_web_intel(args.phone, args.company or None))
+    print(f"\n(SerpApi searches used today: {searches_used_today()})")
+
+
 def main() -> None:
     load_dotenv()
     argv = sys.argv[1:]
-    if argv and argv[0] == "correct":
+    if argv and argv[0] == "web-intel":
+        _run_web_intel(argv[1:])
+    elif argv and argv[0] == "correct":
         _run_correct(argv[1:])
     elif argv and argv[0] == "digest":
         _run_digest(argv[1:])

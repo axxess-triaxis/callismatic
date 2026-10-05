@@ -58,3 +58,8 @@ class CallTriage(BaseModel):
         default="none",
         description="How time-sensitive this is; 'none' unless needs_decision is true",
     )
+    web_evidence: str | None = Field(
+        default=None,
+        description="If check_web_intel was used, one sentence naming the web signal "
+        "(corroborates / contradicts / inconclusive) and what it was based on; otherwise null",
+    )
