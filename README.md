@@ -500,7 +500,9 @@ cp .env.example .env   # then edit BEDROCK_REGION / AWS_PROFILE / BEDROCK_MODEL_
 This project calls Amazon Bedrock, AssemblyAI, and CALL-E, so it needs:
 - AWS credentials resolvable by boto3 (`aws configure` or `aws login`, or an `AWS_PROFILE`
   set in `.env`) for the account you want billed, with model access enabled for a Bedrock
-  model in the region set as `BEDROCK_REGION`.
+  model in the region set as `BEDROCK_REGION`. (`aws login` sessions need `boto3[crt]`,
+  which `pip install -e .` now pulls in.) With `GROQ_API_KEY` set, Bedrock is not needed at all
+  -- see [Free models](#free-models-groq-by-default).
 - An [AssemblyAI](https://www.assemblyai.com/app/account) API key.
 - A [CALL-E](https://dashboard.heycall-e.com/account/api-keys) API key (new accounts get 20
   free calls).
@@ -537,7 +539,7 @@ number.
 pytest
 ```
 
-123 tests, covering the schema, the scam-script, carrier-intel and web-intel heuristics, the blocklist,
+135 tests, covering the schema, the scam-script, carrier-intel and web-intel heuristics, the blocklist,
 the concurrency locking, the model-routing fallback logic, and every external integration
 against a mocked client — no live AWS/AssemblyAI/CALL-E/Twilio/Google/Todoist/WhatsApp/SerpApi
 credentials needed to run them.
