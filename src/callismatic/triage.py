@@ -129,6 +129,7 @@ def _decide_and_act(
 
     record_decision(source_name, triage.model_dump())
     _sync_to_crm_if_configured(source_name, caller_number, triage)
+    _publish_to_still(source_name, caller_number, triage)
 
     if triage.needs_decision and triage.suggested_action:
         add_todo_from_triage(source_name, triage.suggested_action)
@@ -225,6 +226,7 @@ async def _decide_and_act_async(
 
     await asyncio.to_thread(record_decision, source_name, triage.model_dump())
     await asyncio.to_thread(_sync_to_crm_if_configured, source_name, caller_number, triage)
+    await asyncio.to_thread(_publish_to_still, source_name, caller_number, triage)
 
     if triage.needs_decision and triage.suggested_action:
         await asyncio.to_thread(add_todo_from_triage, source_name, triage.suggested_action)
@@ -259,3 +261,30 @@ def _sync_to_crm_if_configured(source_name: str, caller_number: str, triage: Cal
         sync_lead_to_sheet(datetime.now(timezone.utc).isoformat(), source_name, caller_number, triage)
     except Exception as e:  # noqa: BLE001 -- deliberate: CRM sync is a side channel, never a blocker
         print(f"Warning: CRM sync to Google Sheets failed: {e}", file=sys.stderr)
+
+
+def still_event_data(source_name: str, caller_number: str, triage: CallTriage) -> dict:
+    """The data of a STILL triaxis.callismatic lead.triaged.v1 event for one triage."""
+    channel = source_name.split(":", 1)[0] if source_name.startswith(("sms:", "whatsapp:")) else "voicemail"
+    return {
+        "source_ref": source_name,
+        "triaged_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "channel": channel,
+        "caller_number": caller_number if caller_number != "unknown" else None,
+        "triage": triage.model_dump(),
+    }
+
+
+def _publish_to_still(source_name: str, caller_number: str, triage: CallTriage) -> None:
+    """Best-effort publish to STILL, Triaxis's cross-product event bus (a no-op unless
+    STILL_EVENT_BUS_ARN is set). STILL routes leads and important items that need a decision
+    to AXXESS as tasks. Like CRM sync, a failure is logged and never stops triage.
+    key=source_name means re-triaging the same item yields the same event id, which STILL
+    deduplicates."""
+    try:
+        from callismatic.still_emit import emit
+
+        emit("triaxis.callismatic", "lead.triaged.v1", still_event_data(source_name, caller_number, triage),
+             key=source_name)
+    except Exception as e:  # noqa: BLE001 -- deliberate: STILL is a side channel, never a blocker
+        print(f"Warning: STILL publish failed for {source_name}: {type(e).__name__}", file=sys.stderr)
