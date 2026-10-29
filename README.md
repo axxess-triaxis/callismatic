@@ -780,6 +780,20 @@ aws lambda update-function-code --function-name callismatic \
   --image-uri 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:latest --profile axxess-triaxis
 ```
 
+### Publishing to STILL (built, not yet switched on in production)
+
+STILL is Triaxis Ventures' cross-product event bus (EventBridge `still`, ap-southeast-2). After
+every triage, `triage.py` publishes a `triaxis.callismatic` / `lead.triaged.v1` event
+(`still_emit.py`, vendored from the STILL repo). STILL turns leads and important items that need
+a decision into AXXESS tasks. Publishing is off unless `STILL_EVENT_BUS_ARN` is set, and like CRM
+sync it never blocks triage. The event id is derived from the item (`sms:<id>`,
+`whatsapp:<id>`, or the voicemail file name), so re-triaging the same item never makes a second
+task.
+
+To switch it on: attach STILL's `ProducerPolicyArn` to the `callismatic` Lambda role, redeploy
+this code, and set `STILL_EVENT_BUS_ARN=arn:aws:events:ap-southeast-2:227214487086:event-bus/still`.
+To switch it off, unset that variable; no redeploy is needed.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
