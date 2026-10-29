@@ -1,4 +1,4 @@
-# Vendored from github.com/axxess-triaxis STILL repo, src/still/emit.py. Keep in sync there.
+# Vendored from the STILL repo (src/still/emit.py; not yet on GitHub). Keep the two in sync.
 """Producer helper: put one STILL event on the bus.
 
 Self-contained (boto3 and the standard library only) so a product can copy this
