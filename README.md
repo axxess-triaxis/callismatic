@@ -17,7 +17,7 @@ See [Part of the Triaxis stack](#part-of-the-triaxis-stack).
 | | State | Evidence |
 |---|---|---|
 | Production app | **Live** on AWS Lambda (us-east-1) behind a Function URL | `/api/digest` returned 200 on 2026-10-29; see [Deployment](#deployment) |
-| STILL publishing | **Switched on in production 2026-10-29**: Lambda redeployed 12:22 UTC with `STILL_EVENT_BUS_ARN` set | Code in [PR #8](https://github.com/axxess-triaxis/callismatic/pull/8) (merged as ae4ddcb). A real lead going end to end into AXXESS has **not been checked yet** |
+| STILL publishing | **Live and verified end to end 2026-10-29**: Lambda redeployed 12:22 UTC with `STILL_EVENT_BUS_ARN` set; two synthetic leads sent through live `/api/triage/text` became AXXESS tasks `fa971d9e` and `556eb2bb` | Code in [PR #8](https://github.com/axxess-triaxis/callismatic/pull/8) (merged as ae4ddcb); run recorded in [STILL#1](https://github.com/axxess-triaxis/STILL/pull/1); STILL's idempotency records for both events read COMPLETED with those task ids |
 | Tests | **141 passed** | [PR #8](https://github.com/axxess-triaxis/callismatic/pull/8) (135 before, plus 6 STILL tests) |
 | Earlier production fix | `aws login` sessions readable, tests isolated from the real AWS config | [PR #7](https://github.com/axxess-triaxis/callismatic/pull/7), deployed 2026-10-27 |
 | Public demo | Credential-free triage demo | [Hugging Face Space](https://huggingface.co/spaces/SKS1213/callismatic) (200 on 2026-10-29) |
@@ -808,8 +808,8 @@ sync it never blocks triage. The event id is derived from the item (`sms:<id>`,
 task.
 
 It was switched on on 2026-10-29: the Lambda was redeployed at 12:22 UTC with
-`STILL_EVENT_BUS_ARN` set (checked read-only with `aws lambda get-function-configuration`). A real
-lead has not yet been checked end to end into AXXESS.
+`STILL_EVENT_BUS_ARN` set (checked read-only with `aws lambda get-function-configuration`). Two
+synthetic leads were then verified end to end into AXXESS tasks; see the status table above.
 
 To switch it on in a fresh deployment: attach STILL's `ProducerPolicyArn` to the `callismatic` Lambda role, redeploy
 this code, and set `STILL_EVENT_BUS_ARN=arn:aws:events:ap-southeast-2:227214487086:event-bus/still`.
@@ -830,8 +830,8 @@ into one stack.
 |---|---|---|
 | [AXXESS TRIaxis](https://github.com/axxess-triaxis/AXXESSTRIAXIS) | The product we sell: an AI operating platform with governance and a human in the loop | Product: [investor.triaxisventures.com](https://investor.triaxisventures.com) (demo); [Live Beta](https://landing.triaxisventures.com) (sign-in) |
 | [PORT4LLEO](https://github.com/axxess-triaxis/port4lleo) | Governance, security checks, builder analysis, product improvements | Live at [port4leo-sigma.vercel.app](https://port4leo-sigma.vercel.app) |
-| [Callismatic](https://github.com/axxess-triaxis/callismatic) | Sales and outreach: triages inbound calls and messages, researches leads, places callbacks | Live on AWS Lambda (us-east-1); STILL publishing switched on 2026-10-29, end-to-end check pending |
-| [Omnidamus](https://github.com/axxess-triaxis/Omnidamus) | SMS, WhatsApp and email outreach and customer service | Deployed on AWS (ap-southeast-2); STILL publishing switched on 2026-10-29, end-to-end check pending; WhatsApp sending blocked on Meta's display-name review |
+| [Callismatic](https://github.com/axxess-triaxis/callismatic) | Sales and outreach: triages inbound calls and messages, researches leads, places callbacks | Live on AWS Lambda (us-east-1); publishes to STILL since 2026-10-29, verified end to end |
+| [Omnidamus](https://github.com/axxess-triaxis/Omnidamus) | SMS, WhatsApp and email outreach and customer service | Deployed on AWS (ap-southeast-2); publishes to STILL since 2026-10-29, verified end to end; WhatsApp replies blocked on Meta's display-name review |
 | [STILL](https://github.com/axxess-triaxis/STILL) | The event bus that joins them: Callismatic leads and Omnidamus completed conversations become AXXESS tasks | Deployed (EventBridge, ap-southeast-2); STILL to AXXESS verified live 2026-10-29 |
 
 The founder's aim is a roughly 80% automated company with the founder as the human in the
