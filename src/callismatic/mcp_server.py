@@ -9,10 +9,11 @@ mcp.server.streamable_http) -- this SDK (mcp 2.1.1, LATEST_PROTOCOL_VERSION
 2026-07-28) already handles 2025-11-25+ correctly whenever a client declares
 it; nothing here needs to force a version.
 
-Same security posture as web.py: every tool here is read-only, or -- for
-triage_message -- defaults to place_callbacks=False, so a voice assistant
-calling this server can never place a real phone call or mutate the
-blocklist/todos without an explicit opt-in. Tools that actually change state
+Same security posture as web.py: every request needs READ_API_KEY or ADMIN_API_KEY
+(callismatic.auth), Host/Origin headers are checked against an allow-list (see
+build_app), and every tool here is read-only -- triage_message runs as a dry run, so
+a voice assistant calling this server can never place a real phone call or write the
+blocklist, digest, to-dos, CRM or STILL. Tools that actually change state
 (completing a to-do, unblocking a number) are deliberately NOT exposed here
 yet, the same "no public mutating endpoint without a real auth story"
 judgment call web.py already makes for its own public routes.
@@ -22,12 +23,15 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.routing import Route
 
 from callismatic.agent import build_agent
+from callismatic.auth import RequireReaderKey
 from callismatic.digest_report import BLOCKLIST_PATH, DIGEST_PATH, generate_weekly_digest
 from callismatic.todos import list_todos
 from callismatic.tools import check_past_decisions as _check_past_decisions
@@ -110,16 +114,19 @@ def triage_message(text: str, sender: str = "unknown") -> dict:
     Callismatic's actual agent (Strands Agents SDK on Amazon Bedrock/Nova) -- the
     same reasoning it applies to every real voicemail. Returns the category (scam,
     spam, lead, important, routine), a summary, whether a human needs to decide,
-    and whether the number should be blocked. Never places a real outbound call or
-    mutates the blocklist as a side effect of this tool -- it only decides and reports.
+    and whether the number should be blocked. A dry run: it never places a real
+    outbound call or writes the blocklist, digest, to-dos, CRM or STILL -- it only
+    decides and reports.
 
     Args:
         text: the voicemail transcript or message text to triage.
         sender: the caller's phone number, if known.
     """
     agent = _get_agent()
+    # A fresh id per call: keyed on the sender, every later message from the same number
+    # would share one source id (and one STILL dedup key).
     result = triage_text_message(
-        agent, "sms", sender, f"mcp:{sender}", text, place_callbacks=False
+        agent, "sms", sender, f"mcp:{uuid.uuid4().hex}", text, place_callbacks=False, dry_run=True
     )
     return {
         "category": result.triage.category if result.triage else None,
@@ -160,6 +167,23 @@ def find_places_near(query: str, near: str) -> str:
     return format_places(find_places(query, near))
 
 
+# The deployed Lambda Function URL host (public, also in the README), plus local dev.
+DEFAULT_ALLOWED_HOSTS = [
+    "awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws",
+    "localhost",
+    "localhost:*",
+    "127.0.0.1",
+    "127.0.0.1:*",
+]
+
+
+def allowed_hosts() -> list[str]:
+    """DEFAULT_ALLOWED_HOSTS plus any comma-separated hosts in MCP_ALLOWED_HOSTS (a custom
+    domain, a new Function URL), read when the app is built."""
+    extra = [h.strip() for h in os.environ.get("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
+    return list(dict.fromkeys(DEFAULT_ALLOWED_HOSTS + extra))
+
+
 def build_app(*, stateless: bool = True):
     """Returns the ASGI app for the Streamable HTTP transport.
 
@@ -171,6 +195,12 @@ def build_app(*, stateless: bool = True):
     SSE-streaming path in favor of plain request/response, which is what a stateless
     Lambda deployment actually needs.
     """
+    # DNS-rebinding protection is ON, with an explicit allow-list (allowed_hosts below).
+    # History: it was first switched off, for the reason in the next paragraph. That
+    # reason only ruled out *dynamic* discovery of the Function URL host -- the host is
+    # fixed once the function exists, so it can be listed, and every request also needs
+    # an API key now, so this is defence in depth rather than the only gate.
+    #
     # DNS-rebinding Host-header validation, ON by default in this SDK, rejects any
     # Host it doesn't recognize with 421 "Invalid Host header" -- and a Lambda
     # Function URL's hostname is assigned dynamically by AWS at function creation,
@@ -186,7 +216,12 @@ def build_app(*, stateless: bool = True):
     # auth for rebinding to exploit, and every route is already public/read-mostly
     # by the same posture web.py's own docstring already states for the rest of
     # this app.
-    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    hosts = allowed_hosts()
+    security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts,
+        allowed_origins=[f"{scheme}://{h}" for h in hosts for scheme in ("https", "http")],
+    )
     http_app = mcp.streamable_http_app(
         streamable_http_path="/",
         json_response=stateless,
@@ -197,6 +232,11 @@ def build_app(*, stateless: bool = True):
     # so there's no real ambiguity for slash-redirection to resolve -- disabled
     # outright rather than left to interact with the parent Mount's own handling.
     http_app.router.redirect_slashes = False
+    # The key check sits on the route's endpoint, so it covers both standalone use of this
+    # app and web.py's /mcp Route, which takes this same endpoint.
+    route = http_app.routes[0]
+    assert isinstance(route, Route)
+    route.app = RequireReaderKey(route.app)
     return http_app
 
 
