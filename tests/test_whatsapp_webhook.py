@@ -169,3 +169,16 @@ def test_send_whatsapp_message_success_returns_response_json(monkeypatch):
     _, kwargs = mock_post.call_args
     assert kwargs["json"]["to"] == "+15550001111"
     assert kwargs["json"]["text"]["body"] == "hello"
+
+
+def test_post_webhook_fails_closed_without_app_secret(monkeypatch):
+    monkeypatch.delenv("WHATSAPP_APP_SECRET", raising=False)
+    client = TestClient(app)
+    with (
+        patch("callismatic.whatsapp_webhook.triage_text_message") as fake_triage,
+        patch("callismatic.whatsapp_webhook._get_agent") as fake_get_agent,
+    ):
+        response = client.post("/webhook", json=SAMPLE_PAYLOAD)
+    assert response.status_code == 503
+    fake_triage.assert_not_called()
+    fake_get_agent.assert_not_called()

@@ -2,11 +2,14 @@
 scoped, auth-gated JSON API over the same digest/blocklist/todos/reminders/corrections
 data every CLI command already reads and writes.
 
-Security posture, deliberate: GET routes (dashboard, /api/digest, /api/todos,
-/api/blocklist) are public and read-only -- safe for anyone with the URL to view,
-which is the point of a hosted demo. Every route with a side effect (completing a
-todo, sending a reminder, recording a correction, or triggering a live triage run)
-requires an `X-API-Key` header matching ADMIN_API_KEY. There is deliberately no public
+Security posture, deliberate: the JSON read routes (/api/digest, /api/todos,
+/api/blocklist) and /mcp need an API key -- READ_API_KEY or ADMIN_API_KEY, as an
+`X-API-Key` header (or `Authorization: Bearer` on /mcp) -- because they return caller
+numbers and transcripts. Every route with a side effect (completing a todo, sending a
+reminder, recording a correction, or triggering a live triage run) requires
+ADMIN_API_KEY. Keys are checked in callismatic.auth, fail closed when unset, and are
+compared in constant time. The WhatsApp webhook rejects every POST unless
+WHATSAPP_APP_SECRET is set and the body's signature matches it. There is deliberately no public
 "upload a voicemail and triage it" endpoint yet -- audio upload via a public Lambda
 endpoint is real, unfinished scope, not an oversight; /api/triage/text (auth-gated,
 dry-run by default) covers the SMS/WhatsApp-shaped case using the already-verified
@@ -15,6 +18,7 @@ triage_text_message path instead.
 
 from __future__ import annotations
 
+import hmac
 import html
 import json
 import os
@@ -28,6 +32,7 @@ from pydantic import BaseModel
 from starlette.routing import Route
 
 from callismatic.agent import build_agent
+from callismatic.auth import is_admin, is_reader
 from callismatic.corrections import record_correction
 from callismatic.digest_report import BLOCKLIST_PATH, DIGEST_PATH, generate_weekly_digest
 from callismatic.mcp_server import app as mcp_asgi_app
@@ -111,6 +116,8 @@ app = FastAPI(title="Callismatic", lifespan=_lifespan)
 # is unreachable by construction: infinite loop, not a transient bug. A plain
 # Route matches the exact literal path with no prefix-stripping or trailing-
 # slash semantics to go wrong, sidestepping the mismatch entirely.
+#
+# The endpoint taken here is already wrapped in RequireReaderKey by mcp_server.build_app.
 app.router.routes.append(Route("/mcp", endpoint=mcp_asgi_app.routes[0].app, methods=None))
 
 _agent = None
@@ -124,8 +131,12 @@ def _get_agent():
 
 
 def _require_admin(x_api_key: str | None) -> None:
-    expected = os.environ.get("ADMIN_API_KEY")
-    if not expected or x_api_key != expected:
+    if not is_admin(x_api_key):
+        raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key")
+
+
+def _require_reader(x_api_key: str | None) -> None:
+    if not is_reader(x_api_key):
         raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key")
 
 
@@ -354,17 +365,20 @@ section {{ margin-bottom: 2.5rem; }}
 
 
 @app.get("/api/digest")
-def api_digest(days: int = 7) -> dict:
+def api_digest(days: int = 7, x_api_key: str | None = Header(None)) -> dict:
+    _require_reader(x_api_key)
     return {"summary": generate_weekly_digest(days=days), "entries": _load_json(DIGEST_PATH)[-50:]}
 
 
 @app.get("/api/todos")
-def api_todos() -> list[dict]:
+def api_todos(x_api_key: str | None = Header(None)) -> list[dict]:
+    _require_reader(x_api_key)
     return list_todos()
 
 
 @app.get("/api/blocklist")
-def api_blocklist() -> list[dict]:
+def api_blocklist(x_api_key: str | None = Header(None)) -> list[dict]:
+    _require_reader(x_api_key)
     return _load_json(BLOCKLIST_PATH)
 
 
@@ -484,7 +498,7 @@ def whatsapp_verify(request: Request) -> Response:
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge", "")
     expected_token = os.environ.get("WHATSAPP_VERIFY_TOKEN")
-    if mode == "subscribe" and expected_token and token == expected_token:
+    if mode == "subscribe" and expected_token and token and hmac.compare_digest(token, expected_token):
         return Response(content=challenge, media_type="text/plain")
     raise HTTPException(status_code=403, detail="Verification failed")
 
@@ -493,7 +507,11 @@ def whatsapp_verify(request: Request) -> Response:
 async def whatsapp_receive(request: Request, x_hub_signature_256: str | None = Header(None)) -> dict:
     raw_body = await request.body()
     app_secret = os.environ.get("WHATSAPP_APP_SECRET")
-    if app_secret and not verify_signature(raw_body, x_hub_signature_256, app_secret):
+    # Fail closed: with no secret configured there is no way to tell Meta's requests from
+    # forged ones, and a forged message would run triage (and possibly a real callback).
+    if not app_secret:
+        raise HTTPException(status_code=503, detail="Webhook signature secret not configured")
+    if not verify_signature(raw_body, x_hub_signature_256, app_secret):
         raise HTTPException(status_code=403, detail="Invalid signature")
 
     payload = await request.json()

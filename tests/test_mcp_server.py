@@ -107,3 +107,54 @@ def test_triage_message_never_places_a_real_callback(tmp_path, monkeypatch):
     assert result["category"] == "lead"
     assert result["callback_recommended"] is True
     fake_route_call.assert_not_called()  # place_callbacks=False is hardcoded in the tool
+
+
+def test_triage_message_is_a_dry_run(tmp_path, monkeypatch):
+    # The tool's docstring promises no side effects; a scam verdict must not reach the
+    # blocklist, digest or to-dos, and nothing may go to CRM or STILL.
+    _seed_paths(tmp_path, monkeypatch)
+    triage = CallTriage(
+        category="scam",
+        summary="Gift-card scam.",
+        needs_decision=True,
+        suggested_action="Ignore it.",
+        block_recommended=True,
+        decision_reason="Gift-card script.",
+    )
+    fake_agent = MagicMock()
+    fake_agent.return_value.structured_output = triage
+    monkeypatch.setattr(mcp_server, "_get_agent", lambda: fake_agent)
+    crm, still = MagicMock(), MagicMock()
+    monkeypatch.setattr("callismatic.triage._sync_to_crm_if_configured", crm)
+    monkeypatch.setattr("callismatic.triage._publish_to_still", still)
+
+    result = mcp_server.triage_message(text="Buy gift cards now.", sender="+15550001111")
+
+    assert result["block_recommended"] is True
+    assert not (tmp_path / "blocklist.json").exists()
+    assert not (tmp_path / "digest.json").exists()
+    assert not (tmp_path / "todos.json").exists()
+    crm.assert_not_called()
+    still.assert_not_called()
+
+
+def test_triage_message_uses_a_fresh_message_id_per_call(monkeypatch):
+    # Keyed on the sender, every later message from the same number shared one id (and
+    # one STILL dedup key).
+    seen = []
+
+    def fake_triage_text_message(agent, channel, sender, message_id, text, **kwargs):
+        seen.append(message_id)
+        result = MagicMock()
+        result.triage = None
+        result.error = None
+        return result
+
+    monkeypatch.setattr(mcp_server, "_get_agent", MagicMock)
+    monkeypatch.setattr(mcp_server, "triage_text_message", fake_triage_text_message)
+
+    mcp_server.triage_message(text="first", sender="+15550001111")
+    mcp_server.triage_message(text="second", sender="+15550001111")
+
+    assert len(set(seen)) == 2
+    assert all(m.startswith("mcp:") and "+15550001111" not in m for m in seen)

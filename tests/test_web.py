@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from callismatic import web
@@ -22,6 +23,7 @@ def _client(tmp_path, monkeypatch, *, admin_key: str | None = "test-admin-key"):
     monkeypatch.delenv("WHATSAPP_ACCESS_TOKEN", raising=False)
     monkeypatch.delenv("WHATSAPP_PHONE_NUMBER_ID", raising=False)
     monkeypatch.delenv("TODOIST_API_TOKEN", raising=False)
+    monkeypatch.delenv("READ_API_KEY", raising=False)
     if admin_key is not None:
         monkeypatch.setenv("ADMIN_API_KEY", admin_key)
     else:
@@ -37,11 +39,38 @@ def test_dashboard_renders_with_no_data(tmp_path, monkeypatch):
     assert "No voicemails/messages triaged yet." in response.text
 
 
-def test_api_digest_and_todos_are_public(tmp_path, monkeypatch):
+ADMIN = {"X-API-Key": "test-admin-key"}
+READ_ROUTES = ("/api/digest", "/api/todos", "/api/blocklist")
+
+
+def test_read_api_rejects_missing_or_wrong_key(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
-    assert client.get("/api/digest").status_code == 200
-    assert client.get("/api/todos").json() == []
-    assert client.get("/api/blocklist").json() == []
+    for route in READ_ROUTES:
+        assert client.get(route).status_code == 401, route
+        assert client.get(route, headers={"X-API-Key": "wrong"}).status_code == 401, route
+
+
+def test_read_api_accepts_read_key_or_admin_key(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setenv("READ_API_KEY", "test-read-key")
+    for headers in ({"X-API-Key": "test-read-key"}, ADMIN):
+        assert client.get("/api/digest", headers=headers).status_code == 200
+        assert client.get("/api/todos", headers=headers).json() == []
+        assert client.get("/api/blocklist", headers=headers).json() == []
+
+
+def test_read_api_fails_closed_when_no_key_is_configured(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch, admin_key=None)
+    for route in READ_ROUTES:
+        assert client.get(route).status_code == 401, route
+        assert client.get(route, headers={"X-API-Key": ""}).status_code == 401, route
+
+
+def test_read_key_cannot_call_mutating_endpoints(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setenv("READ_API_KEY", "test-read-key")
+    response = client.post("/api/reminders/send", headers={"X-API-Key": "test-read-key"})
+    assert response.status_code == 401
 
 
 def test_mutating_endpoint_rejects_missing_api_key(tmp_path, monkeypatch):
@@ -71,7 +100,7 @@ def test_complete_todo_via_api(tmp_path, monkeypatch):
 
     response = client.post(f"/api/todos/{item['id']}/complete", headers={"X-API-Key": "test-admin-key"})
     assert response.status_code == 200
-    assert client.get("/api/todos").json() == []
+    assert client.get("/api/todos", headers=ADMIN).json() == []
 
 
 def test_add_reminder_via_api(tmp_path, monkeypatch):
@@ -96,7 +125,7 @@ def test_unblock_via_api(tmp_path, monkeypatch):
     )
     assert response.status_code == 200
     assert response.json()["was_on_blocklist"] is True
-    assert client.get("/api/blocklist").json() == []
+    assert client.get("/api/blocklist", headers=ADMIN).json() == []
 
 
 def test_triage_text_via_api(tmp_path, monkeypatch):
@@ -127,3 +156,75 @@ def test_whatsapp_verify_endpoint(tmp_path, monkeypatch):
     )
     assert response.status_code == 200
     assert response.text == "xyz"
+
+
+def test_whatsapp_verify_endpoint_rejects_wrong_token(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "my-token")
+    response = client.get(
+        "/webhook", params={"hub.mode": "subscribe", "hub.verify_token": "my-tokem", "hub.challenge": "xyz"}
+    )
+    assert response.status_code == 403
+
+
+def test_whatsapp_webhook_fails_closed_without_app_secret(tmp_path, monkeypatch):
+    # Without a secret there's no way to tell Meta from a forger, so nothing may be triaged.
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.delenv("WHATSAPP_APP_SECRET", raising=False)
+    get_agent = MagicMock()
+    monkeypatch.setattr(web, "_get_agent", get_agent)
+    triage = MagicMock()
+    monkeypatch.setattr(web, "triage_text_message", triage)
+
+    response = client.post("/webhook", json={"object": "whatsapp_business_account", "entry": []})
+
+    assert response.status_code == 503
+    get_agent.assert_not_called()
+    triage.assert_not_called()
+
+
+MCP_INIT = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}},
+}
+MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+
+
+@pytest.fixture(scope="module")
+def mcp_client():
+    # One client for every /mcp test: web._lifespan starts the MCP session manager once per
+    # process (deliberately, for Lambda), bound to the event loop of the first client that
+    # runs the lifespan.
+    with TestClient(web.app, base_url="http://localhost:8000") as client:
+        yield client
+
+
+@pytest.fixture
+def mcp_keys(monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    monkeypatch.setenv("READ_API_KEY", "test-read-key")
+
+
+def test_mcp_rejects_requests_without_a_key(mcp_client, mcp_keys):
+    assert mcp_client.post("/mcp", json=MCP_INIT, headers=MCP_HEADERS).status_code == 401
+    bad = {**MCP_HEADERS, "Authorization": "Bearer wrong"}
+    assert mcp_client.post("/mcp", json=MCP_INIT, headers=bad).status_code == 401
+
+
+def test_mcp_accepts_read_key_as_header_or_bearer(mcp_client, mcp_keys):
+    for auth in ({"X-API-Key": "test-read-key"}, {"Authorization": "Bearer test-read-key"}):
+        response = mcp_client.post("/mcp", json=MCP_INIT, headers={**MCP_HEADERS, **auth})
+        assert response.status_code == 200, response.text
+        assert response.json()["result"]["serverInfo"]["name"] == "callismatic"
+
+
+def test_mcp_rejects_unknown_host_and_origin(mcp_client, mcp_keys):
+    # DNS-rebinding protection: a valid key is not enough from a Host or Origin not on the list.
+    evil_host = {**MCP_HEADERS, **ADMIN, "Host": "evil.example"}
+    assert mcp_client.post("/mcp", json=MCP_INIT, headers=evil_host).status_code == 421
+    evil_origin = {**MCP_HEADERS, **ADMIN, "Origin": "https://evil.example"}
+    assert mcp_client.post("/mcp", json=MCP_INIT, headers=evil_origin).status_code == 403
+    deployed = {**MCP_HEADERS, **ADMIN, "Host": "awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws"}
+    assert mcp_client.post("/mcp", json=MCP_INIT, headers=deployed).status_code == 200

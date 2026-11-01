@@ -79,11 +79,15 @@ def triage_text_message(
     body: str,
     *,
     place_callbacks: bool = True,
+    dry_run: bool = False,
 ) -> TriageResult:
     """Triages one already-received SMS/WhatsApp message through the same pipeline as a
     voicemail -- no transcription step, since the message body already is the text to reason
     over. `message_id` plays the same role `file_name` plays for a voicemail: a stable label
-    for this event in the digest/blocklist/corrections logs."""
+    for this event in the digest/blocklist/corrections logs.
+
+    dry_run=True returns the decision with no side effects at all: nothing written to the
+    digest, blocklist, to-dos, CRM or STILL, and no callback."""
     return _decide_and_act(
         agent,
         source_name=f"{channel}:{message_id}",
@@ -91,6 +95,7 @@ def triage_text_message(
         transcript=body,
         intake_label=f"{channel.upper()} message",
         place_callbacks=place_callbacks,
+        dry_run=dry_run,
     )
 
 
@@ -101,14 +106,22 @@ def _triage_one(agent: Agent, path: Path, *, place_callbacks: bool) -> TriageRes
     except RuntimeError as e:
         return TriageResult(file_name=path.name, caller_number=caller_number, triage=None, error=str(e))  # type: ignore[arg-type]
 
-    return _decide_and_act(
-        agent,
-        source_name=path.name,
-        caller_number=caller_number,
-        transcript=transcript,
-        intake_label="voicemail",
-        place_callbacks=place_callbacks,
-    )
+    try:
+        return _decide_and_act(
+            agent,
+            source_name=path.name,
+            caller_number=caller_number,
+            transcript=transcript,
+            intake_label="voicemail",
+            place_callbacks=place_callbacks,
+        )
+    except Exception as e:  # noqa: BLE001 -- one voicemail's failure must not lose the rest of the run
+        return _failed(path.name, caller_number, e)
+
+
+def _failed(source_name: str, caller_number: str, e: Exception) -> TriageResult:
+    return TriageResult(file_name=source_name, caller_number=caller_number, triage=None,  # type: ignore[arg-type]
+                        error=f"{type(e).__name__}: {e}")
 
 
 def _decide_and_act(
@@ -119,6 +132,7 @@ def _decide_and_act(
     transcript: str,
     intake_label: str,
     place_callbacks: bool,
+    dry_run: bool = False,
 ) -> TriageResult:
     prompt = (
         f"Triage this {intake_label}.\n\nSource: {source_name}\nCaller number: {caller_number}\n\n"
@@ -126,6 +140,9 @@ def _decide_and_act(
     )
     response = agent(prompt, structured_output_model=CallTriage)
     triage: CallTriage = response.structured_output
+
+    if dry_run:
+        return TriageResult(file_name=source_name, caller_number=caller_number, triage=triage)
 
     record_decision(source_name, triage.model_dump())
     _sync_to_crm_if_configured(source_name, caller_number, triage)
@@ -197,15 +214,21 @@ async def _triage_one_async(path: Path, *, place_callbacks: bool, semaphore: asy
         except RuntimeError as e:
             return TriageResult(file_name=path.name, caller_number=caller_number, triage=None, error=str(e))  # type: ignore[arg-type]
 
-        agent = build_agent()  # this voicemail's own sub-agent -- never shared with another concurrent task
-        return await _decide_and_act_async(
-            agent,
-            source_name=path.name,
-            caller_number=caller_number,
-            transcript=transcript,
-            intake_label="voicemail",
-            place_callbacks=place_callbacks,
-        )
+        # Any failure past this point stays in this voicemail's result. Raised out of here, it
+        # would make asyncio.gather drop every other voicemail's result -- after their digest,
+        # blocklist and CALL-E side effects had already happened, so a rerun would repeat them.
+        try:
+            agent = build_agent()  # this voicemail's own sub-agent -- never shared with another concurrent task
+            return await _decide_and_act_async(
+                agent,
+                source_name=path.name,
+                caller_number=caller_number,
+                transcript=transcript,
+                intake_label="voicemail",
+                place_callbacks=place_callbacks,
+            )
+        except Exception as e:  # noqa: BLE001
+            return _failed(path.name, caller_number, e)
 
 
 async def _decide_and_act_async(
