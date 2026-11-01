@@ -142,7 +142,7 @@ def verify_webhook(request: Request) -> Response:
     challenge = request.query_params.get("hub.challenge", "")
 
     expected_token = os.environ.get("WHATSAPP_VERIFY_TOKEN")
-    if mode == "subscribe" and expected_token and token == expected_token:
+    if mode == "subscribe" and expected_token and token and hmac.compare_digest(token, expected_token):
         return Response(content=challenge, media_type="text/plain")
     raise HTTPException(status_code=403, detail="Verification failed")
 
@@ -151,7 +151,11 @@ def verify_webhook(request: Request) -> Response:
 async def receive_webhook(request: Request, x_hub_signature_256: str | None = Header(None)) -> JsonObject:
     raw_body = await request.body()
     app_secret = os.environ.get("WHATSAPP_APP_SECRET")
-    if app_secret and not verify_signature(raw_body, x_hub_signature_256, app_secret):
+    # Fail closed: with no secret configured there is no way to tell Meta's requests from
+    # forged ones, and a forged message would run triage (and possibly a real callback).
+    if not app_secret:
+        raise HTTPException(status_code=503, detail="Webhook signature secret not configured")
+    if not verify_signature(raw_body, x_hub_signature_256, app_secret):
         raise HTTPException(status_code=403, detail="Invalid signature")
 
     payload = await request.json()

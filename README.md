@@ -401,7 +401,7 @@ same reason.
 
 **Web/API layer** — [FastAPI](https://fastapi.tiangolo.com/) (`web.py`): a server-rendered,
 two-column HTML dashboard (hand-rolled CSS, no client-side framework or build step), a
-read-only JSON API, an `X-API-Key`-gated mutating API, the WhatsApp webhook, and an MCP server
+key-gated JSON read and mutating APIs, the WhatsApp webhook, and an MCP server
 (`mcp_server.py`, Streamable HTTP, for Alexa+ and other MCP-speaking clients) — all in one app,
 one Lambda deployment.
 
@@ -766,14 +766,18 @@ something it isn't either.
 `web.py` is the single deployable app, running live on AWS Lambda behind a public Function
 URL: https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/
 
-- **Public, read-only**: `/` (dashboard), `/api/digest`, `/api/todos`, `/api/blocklist`.
-- **Public, MCP protocol**: `/mcp` (Streamable HTTP — see [Beyond the demo
-  pipeline](#beyond-the-demo-pipeline-opt-in-extensions-already-built)) — read-only tools plus
-  `triage_message`, which decides and reports but never places a real callback or mutates
-  state.
-- **Public, Meta's own auth**: `/webhook` (WhatsApp — verify-token challenge on GET, HMAC
-  signature check on POST).
-- **Auth-gated** (`X-API-Key` header): completing a to-do, adding/sending reminders,
+- **Public, read-only**: `/` (dashboard).
+- **Read key** (`X-API-Key` header with `READ_API_KEY` or `ADMIN_API_KEY`): `/api/digest`,
+  `/api/todos`, `/api/blocklist`.
+- **Read key, MCP protocol**: `/mcp` (Streamable HTTP — see [Beyond the demo
+  pipeline](#beyond-the-demo-pipeline-opt-in-extensions-already-built)), with the key as
+  `X-API-Key` or `Authorization: Bearer`. Host and Origin headers must be on the allow-list
+  (the Function URL host and localhost; add more with `MCP_ALLOWED_HOSTS`). Read-only tools
+  plus `triage_message`, a dry run that decides and reports but never places a callback or
+  writes any state.
+- **Meta's own auth**: `/webhook` (WhatsApp — verify-token challenge on GET, HMAC signature
+  check on POST; POSTs are refused unless `WHATSAPP_APP_SECRET` is set).
+- **Admin key** (`X-API-Key` header with `ADMIN_API_KEY`): completing a to-do, adding/sending reminders,
   recording a correction, and `/api/triage/text` — which defaults to
   `place_callbacks=false` so a stray authenticated request still can't spend real CALL-E
   quota without an explicit opt-in.

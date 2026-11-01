@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from callismatic.schema import CallTriage
-from callismatic.triage import caller_number_from_filename, triage_inbox_concurrent, triage_text_message
+from callismatic.triage import caller_number_from_filename, triage_inbox, triage_inbox_concurrent, triage_text_message
 
 
 def test_extracts_phone_number_from_filename():
@@ -212,3 +212,80 @@ def test_triage_inbox_concurrent_respects_max_concurrency(tmp_path, monkeypatch)
 
     assert len(results) == 6
     assert peak <= 2, f"expected at most 2 sub-agents in flight at once, saw {peak}"
+
+
+def _scam_triage():
+    return CallTriage(
+        category="scam",
+        summary="Gift-card scam.",
+        needs_decision=True,
+        suggested_action="Ignore it.",
+        block_recommended=True,
+        decision_reason="Gift-card script.",
+        callback_recommended=True,
+        callback_task="Call back.",
+    )
+
+
+def test_triage_text_message_dry_run_has_no_side_effects(tmp_path, monkeypatch):
+    side_effects = {}
+    for name in ("record_decision", "block_number", "add_todo_from_triage", "route_call",
+                 "_sync_to_crm_if_configured", "_publish_to_still"):
+        side_effects[name] = MagicMock()
+        monkeypatch.setattr(f"callismatic.triage.{name}", side_effects[name])
+    fake_agent = MagicMock()
+    fake_agent.return_value.structured_output = _scam_triage()
+
+    result = triage_text_message(fake_agent, "sms", "+15550001111", "m1", "Buy gift cards now.", dry_run=True)
+
+    assert result.triage.block_recommended is True  # the decision is still reported
+    for name, mock in side_effects.items():
+        assert not mock.called, name
+
+
+def _inbox_with_two_voicemails(tmp_path, monkeypatch):
+    monkeypatch.setattr("callismatic.tools.DIGEST_PATH", tmp_path / "digest.json")
+    monkeypatch.setattr("callismatic.tools.BLOCKLIST_PATH", tmp_path / "blocklist.json")
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a_+15550001111.wav").write_bytes(b"fake")
+    (inbox / "b_+15550002222.wav").write_bytes(b"fake")
+    monkeypatch.setattr("callismatic.triage.transcribe_voicemail", lambda path: f"transcript for {path.name}")
+    return inbox
+
+
+def test_triage_inbox_concurrent_keeps_other_results_when_one_agent_call_fails(tmp_path, monkeypatch):
+    inbox = _inbox_with_two_voicemails(tmp_path, monkeypatch)
+
+    async def fake_invoke_async(prompt, structured_output_model=None):
+        if "a_+15550001111.wav" in prompt:
+            raise ValueError("model throttled")
+        response = MagicMock()
+        response.structured_output = CallTriage(category="routine", summary="ok", needs_decision=False)
+        return response
+
+    def fake_build_agent():
+        agent = MagicMock()
+        agent.invoke_async = fake_invoke_async
+        return agent
+
+    monkeypatch.setattr("callismatic.triage.build_agent", fake_build_agent)
+
+    results = {r.file_name: r for r in asyncio.run(triage_inbox_concurrent(inbox, place_callbacks=False))}
+
+    assert results["a_+15550001111.wav"].triage is None
+    assert results["a_+15550001111.wav"].error == "ValueError: model throttled"
+    assert results["b_+15550002222.wav"].error is None
+    assert results["b_+15550002222.wav"].triage.category == "routine"
+
+
+def test_triage_inbox_keeps_other_results_when_one_agent_call_fails(tmp_path, monkeypatch):
+    inbox = _inbox_with_two_voicemails(tmp_path, monkeypatch)
+    ok = MagicMock()
+    ok.structured_output = CallTriage(category="routine", summary="ok", needs_decision=False)
+    fake_agent = MagicMock(side_effect=[RuntimeError("Bedrock down"), ok])
+
+    results = triage_inbox(fake_agent, inbox, place_callbacks=False)
+
+    assert [r.error for r in results] == ["RuntimeError: Bedrock down", None]
+    assert results[1].triage.category == "routine"
