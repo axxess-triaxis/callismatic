@@ -801,6 +801,22 @@ aws lambda update-function-code --function-name callismatic \
   --image-uri 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:latest --profile axxess-triaxis
 ```
 
+### Staging
+
+`template.yaml` describes a separate `callismatic-staging` stack, used by the cross-product
+end-to-end test. **Not deployed yet.** The production function above is not managed by this template.
+It only accepts an image tagged `staging` and the `still-staging` bus, and it has no CALL-E key, so it
+cannot place a real call. The stack generates its own `ADMIN_API_KEY` in Secrets Manager.
+
+```bash
+docker build --provenance=false --sbom=false -t callismatic:staging .
+docker tag callismatic:staging 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:staging
+docker push 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic:staging
+sam deploy --region us-east-1 --stack-name callismatic-staging --capabilities CAPABILITY_IAM \
+  --resolve-s3 --image-repository 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic --tags Stage=staging \
+  --parameter-overrides StillEventBusArn=<still-staging EventBusArn>
+```
+
 ### Publishing to STILL (switched on in production 2026-10-29)
 
 STILL is Triaxis Ventures' cross-product event bus (EventBridge `still`, ap-southeast-2). After
