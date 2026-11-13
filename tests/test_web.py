@@ -31,9 +31,23 @@ def _client(tmp_path, monkeypatch, *, admin_key: str | None = "test-admin-key"):
     return TestClient(web.app)
 
 
+def test_dashboard_needs_a_read_key(tmp_path, monkeypatch):
+    # The dashboard lists senders' phone numbers and message summaries, so it is never public
+    # (GTM 2026-11-13, before the verified WhatsApp number goes live). A read key works.
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setenv("READ_API_KEY", "test-read-key")
+    assert client.get("/").status_code == 401
+    assert client.get("/", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/", headers={"X-API-Key": "test-read-key"}).status_code == 200
+
+
+def test_dashboard_fails_closed_with_no_keys_configured(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch, admin_key=None)
+    assert client.get("/").status_code == 401
+
 def test_dashboard_renders_with_no_data(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
-    response = client.get("/")
+    response = client.get("/", headers={"X-API-Key": "test-admin-key"})
     assert response.status_code == 200
     assert "Callismatic" in response.text
     assert "No voicemails/messages triaged yet." in response.text

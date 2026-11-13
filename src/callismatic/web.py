@@ -147,7 +147,7 @@ def _load_json(path: Path) -> list[dict]:
 
 
 # --------------------------------------------------------------------------
-# Dashboard (public, read-only)
+# Dashboard (read-only; needs the read or admin key)
 # --------------------------------------------------------------------------
 
 
@@ -177,7 +177,9 @@ def _within_days(timestamp_iso: str, since: datetime) -> bool:
 
 
 @app.get("/", response_class=Response)
-def dashboard() -> Response:
+def dashboard(x_api_key: str | None = Header(None)) -> Response:
+    # Never public: it lists senders' phone numbers and message summaries (WhatsApp included).
+    _require_reader(x_api_key)
     all_digest = _load_json(DIGEST_PATH)
     all_blocklist = _load_json(BLOCKLIST_PATH)
     digest = all_digest[-20:][::-1]

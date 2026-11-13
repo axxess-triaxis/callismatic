@@ -82,7 +82,7 @@ to-dos/blocked-numbers sidebar) + WhatsApp webhook + scoped JSON API + MCP serve
 is deployed to AWS Lambda at
 https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/ — see
 [Deployment](#deployment) below for how, and exactly what it does and doesn't expose
-publicly.
+publicly (the dashboard needs a read key).
 
 ---
 
@@ -766,8 +766,8 @@ something it isn't either.
 `web.py` is the single deployable app, running live on AWS Lambda behind a public Function
 URL: https://awpfsufk4dofdncv6cgqsaifwy0kvolm.lambda-url.us-east-1.on.aws/
 
-- **Public, read-only**: `/` (dashboard).
-- **Read key** (`X-API-Key` header with `READ_API_KEY` or `ADMIN_API_KEY`): `/api/digest`,
+- **Read key** (`X-API-Key` header with `READ_API_KEY` or `ADMIN_API_KEY`): `/` (dashboard; it
+  lists senders' phone numbers and message summaries, so it is never public), `/api/digest`,
   `/api/todos`, `/api/blocklist`.
 - **Read key, MCP protocol**: `/mcp` (Streamable HTTP — see [Beyond the demo
   pipeline](#beyond-the-demo-pipeline-opt-in-extensions-already-built)), with the key as
