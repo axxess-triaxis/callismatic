@@ -58,7 +58,8 @@ Resources:
       ImageUri: !Ref ImageUri
       Architectures: [x86_64]
       MemorySize: 1024
-      Timeout: 90
+      # Outbound agent calls (2026-11-13) run in an async self-invoke that lasts as long as the call.
+      Timeout: 600
       Tracing: Active
       FunctionUrlConfig:
         AuthType: NONE
@@ -68,6 +69,9 @@ Resources:
           BEDROCK_REGION: !Ref AWS::Region
           BEDROCK_MODEL_ID: !Sub us.${BedrockFoundationModelId}
           STILL_EVENT_BUS_ARN: !Ref StillEventBusArn
+          # Staging only: outbound jobs run against the scripted fake provider; no call is placed.
+          OUTBOUND_AGENT_CALLS_ENABLED: "true"
+          OUTBOUND_FAKE_PROVIDER: "true"
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -77,6 +81,9 @@ Resources:
             - Effect: Allow
               Action: events:PutEvents
               Resource: !Ref StillEventBusArn
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-AppFunction-*
             - Effect: Allow
               Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
               Resource:
