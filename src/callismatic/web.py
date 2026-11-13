@@ -517,5 +517,9 @@ async def whatsapp_receive(request: Request, x_hub_signature_256: str | None = H
     payload = await request.json()
     agent = _get_agent()
     for message in parse_incoming_messages(payload):
-        triage_text_message(agent, "whatsapp", message["sender"], message["message_id"], message["text"])
+        # Never a phone callback from WhatsApp: the sender may not have asked to be called
+        # (calling rules in India and the UAE). The message still becomes a triaged lead.
+        triage_text_message(
+            agent, "whatsapp", message["sender"], message["message_id"], message["text"], place_callbacks=False
+        )
     return {"status": "ok"}

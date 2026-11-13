@@ -183,6 +183,39 @@ def test_whatsapp_webhook_fails_closed_without_app_secret(tmp_path, monkeypatch)
     triage.assert_not_called()
 
 
+
+def test_signed_whatsapp_message_is_triaged_without_a_callback(tmp_path, monkeypatch):
+    # A WhatsApp message can come from anyone. It becomes a triaged lead (and, through STILL,
+    # an AXXESS task) but must never trigger a real phone call back to someone who did not
+    # ask for one (GTM 2026-11-13: calling rules in India and the UAE).
+    import hashlib
+    import hmac
+    import json
+
+    client = _client(tmp_path, monkeypatch)
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", "test-secret")
+    monkeypatch.setattr(web, "_get_agent", lambda: MagicMock())
+    triage = MagicMock()
+    monkeypatch.setattr(web, "triage_text_message", triage)
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [{"changes": [{"value": {"messages": [
+            {"from": "919800000000", "id": "wamid.TEST", "type": "text", "text": {"body": "Interested in a demo"}}
+        ]}}]}],
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+
+    response = client.post(
+        "/webhook", content=body, headers={"X-Hub-Signature-256": signature, "Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 200
+    triage.assert_called_once()
+    args, kwargs = triage.call_args
+    assert args[1:] == ("whatsapp", "919800000000", "wamid.TEST", "Interested in a demo")
+    assert kwargs.get("place_callbacks") is False
+
 MCP_INIT = {
     "jsonrpc": "2.0",
     "id": 1,
