@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import AsyncIterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.routing import Route
 
@@ -37,6 +38,7 @@ from callismatic.corrections import record_correction
 from callismatic.digest_report import BLOCKLIST_PATH, DIGEST_PATH, generate_weekly_digest
 from callismatic.mcp_server import app as mcp_asgi_app
 from callismatic.mcp_server import mcp as mcp_server_instance
+from callismatic.outbound import OutboundCallRequest, ProviderUnavailable, dispatch_outbound_job, outbound_enabled, provider_for
 from callismatic.reminders import add_reminder, send_due_reminders
 from callismatic.todos import TODOS_PATH, complete_todo, list_todos
 from callismatic.tools import find_digest_entry, unblock_number
@@ -487,6 +489,26 @@ def api_triage_text(body: TriageTextRequest, x_api_key: str | None = Header(None
         "callback_result": result.callback_result,
         "error": result.error,
     }
+
+
+# --------------------------------------------------------------------------
+# Outbound agent calls requested from AXXESS (admin key; off by default)
+# --------------------------------------------------------------------------
+
+
+@app.post("/api/outbound-calls", status_code=202)
+def api_outbound_calls(body: OutboundCallRequest, x_api_key: str | None = Header(None)):
+    """AXXESS's "Call with agent": accept one job, place the call after responding. AXXESS's gate has
+    already allowed the call; this side refuses unless enabled and a lead-call provider exists."""
+    _require_admin(x_api_key)
+    if not outbound_enabled():
+        return JSONResponse(status_code=503, content={"error": "outbound_disabled"})
+    try:
+        provider_for(body.phone_e164)
+    except ProviderUnavailable:
+        return JSONResponse(status_code=409, content={"error": "provider_unavailable"})
+    dispatch_outbound_job(body)
+    return {"accepted": True}
 
 
 # --------------------------------------------------------------------------

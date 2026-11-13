@@ -50,4 +50,15 @@ _bootstrap_secrets()
 
 from callismatic.web import app  # noqa: E402 -- must come after secrets are in os.environ
 
-handler = Mangum(app)
+_http_handler = Mangum(app)
+
+
+def handler(event, context):
+    # Outbound agent calls (2026-11-13): /api/outbound-calls answers AXXESS at once and invokes this
+    # function again asynchronously with the job, because a phone call outlasts an HTTP request.
+    # Only an IAM principal allowed to invoke the function can send this shape.
+    if isinstance(event, dict) and "callismatic_outbound_job" in event:
+        from callismatic.outbound import OutboundCallRequest, run_outbound_job
+
+        return run_outbound_job(OutboundCallRequest.model_validate(event["callismatic_outbound_job"]))
+    return _http_handler(event, context)

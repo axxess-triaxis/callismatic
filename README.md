@@ -817,6 +817,26 @@ sam deploy --region us-east-1 --stack-name callismatic-staging --capabilities CA
   --parameter-overrides StillEventBusArn=<still-staging EventBusArn>
 ```
 
+### Outbound agent calls from AXXESS (built 2026-11-13, off)
+
+`POST /api/outbound-calls` (admin key) takes one job from AXXESS's "Call with agent" button. It answers
+at once and runs the call in an asynchronous self-invoke of the same Lambda (`lambda_handler.handler`
+routes the `callismatic_outbound_job` event to `outbound.run_outbound_job`). The voice agent opens by
+saying it is an AI assistant calling for Triaxis Ventures, offers up to three demo slots from Google
+Calendar, and honours "don't call me again". The result goes to STILL as `call.completed.v1`, with no
+transcript or phone number in it.
+
+It cannot place a real call yet, by design:
+- Off unless `OUTBOUND_AGENT_CALLS_ENABLED=true`.
+- A lead call only uses a provider in `outbound.OUTBOUND_PROVIDERS_BY_COUNTRY_CODE`, which is empty. It
+  never falls back to CALL-E, whose India numbers are for development and testing only. Every job is
+  refused as `provider_unavailable` until a DLT-registered Indian (or TDRA-registered UAE) route exists.
+- AXXESS's own gate refuses agent calls until DLT, TDRA and counsel sign-off are recorded.
+
+Before enabling in production: the Lambda role needs `lambda:InvokeFunction` on itself and a timeout
+long enough for a call (staging's template sets 600 seconds), and the founder must approve the call
+script in `outbound.build_task`. Staging runs the scripted `fake_provider` instead of a call.
+
 ### Publishing to STILL (switched on in production 2026-10-29)
 
 STILL is Triaxis Ventures' cross-product event bus (EventBridge `still`, ap-southeast-2). After
