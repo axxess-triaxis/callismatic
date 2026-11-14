@@ -837,6 +837,14 @@ Before enabling in production: the Lambda role needs `lambda:InvokeFunction` on 
 long enough for a call (staging's template sets 600 seconds), and the founder must approve the call
 script in `outbound.build_task`. Staging runs the scripted `fake_provider` instead of a call.
 
+Production status (2026-11-14):
+- The self-invoke policy `callismatic-self-invoke` and a 600 second timeout are in place. The image is
+  `sha256:16ec63a1...`, from `0f83ab3`; to roll back, use `sha256:5ab331e2...`.
+- `OUTBOUND_AGENT_CALLS_ENABLED` is not set, so outbound calls stay off.
+- The founder approved the call script in `outbound.build_task` as written ("Approve as written").
+  Any change to its wording needs a fresh approval. The AI-disclosure wording still needs counsel's
+  sign-off, since India's rules for AI voice calls are reported as draft.
+
 ### Publishing to STILL (switched on in production 2026-10-29)
 
 STILL is Triaxis Ventures' cross-product event bus (EventBridge `still`, ap-southeast-2). After
