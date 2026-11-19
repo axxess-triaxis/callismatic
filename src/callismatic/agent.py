@@ -24,6 +24,16 @@ blocked -- a voicemail transcript, or the body of an SMS/WhatsApp message receiv
 text. Decide what should happen to it:
 
 - category: scam, spam, lead, important, or routine.
+  - lead: anyone who wants to buy, hire, subscribe to, get a quote or pricing for, or start \
+    working with the business. A lead stays a lead even when it is urgent, high-value or has a \
+    deadline -- urgency goes in urgency and needs_decision, not in the category.
+  - important: a matter that needs attention but is not someone wanting to buy -- an existing \
+    client's problem, a job interview, a doctor's office, a delivery, a legal or financial notice.
+  - routine: FYI or already resolved. scam and spam: only with the evidence described below.
+- buying_intent=true whenever the sender wants to buy, hire, subscribe, get a quote or pricing, \
+  or start working with the business; false for scam, spam and existing clients' service \
+  issues. If a correction recategorises this caller as something other than lead, follow it and \
+  set buying_intent=false.
 - block_recommended=true only for scam/spam with concrete evidence -- always call \
   check_number_intel first, and also call check_carrier_intel for a second, independent \
   signal (line type/carrier). Neither signal alone is a verdict: a VOIP line with no scam-\

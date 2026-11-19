@@ -11,14 +11,26 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 CallCategory = Literal["scam", "spam", "lead", "important", "routine"]
 Urgency = Literal["none", "low", "medium", "high"]
 
 
 class CallTriage(BaseModel):
-    category: CallCategory = Field(description="What kind of caller this voicemail is from")
+    category: CallCategory = Field(
+        description="What kind of caller this is. lead: someone who wants to buy, hire, subscribe, "
+        "get a quote or pricing, or start working with the business -- even when it is urgent or "
+        "high-stakes. important: a non-sales matter that needs attention (an existing client's "
+        "issue, a job interview, a doctor, a delivery, a legal or financial notice). routine: FYI or "
+        "already resolved. scam/spam: as evidenced."
+    )
+    buying_intent: bool = Field(
+        default=False,
+        description="True when the sender wants to buy, hire, subscribe to, get a quote or pricing "
+        "for, or start working with the business. False for scam and spam, and for existing "
+        "clients' service issues.",
+    )
     summary: str = Field(description="One or two sentence plain-language summary of the voicemail")
     key_facts: dict[str, str] = Field(
         default_factory=dict,
@@ -64,3 +76,13 @@ class CallTriage(BaseModel):
         "(corroborates / contradicts / inconclusive) and the concrete facts it was based on, "
         "e.g. the official site found and whether the caller's number appears on it; otherwise null",
     )
+
+    @model_validator(mode="after")
+    def _buying_intent_is_a_lead(self) -> CallTriage:
+        """A buyer is always a lead. The model alone labelled the same clear purchase request
+        'important' in 2 of 8 runs (Nova Pro, 2026-11-19), and STILL only turns every *lead* into
+        an AXXESS task. So the narrow yes/no buying_intent decides, in code. It never overrides
+        scam or spam."""
+        if self.buying_intent and self.category in ("important", "routine"):
+            self.category = "lead"
+        return self
