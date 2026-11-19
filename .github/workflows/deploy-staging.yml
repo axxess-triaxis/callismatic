@@ -1,0 +1,57 @@
+# Builds the Lambda image and deploys it to Callismatic staging (us-east-1).
+# Deploy any commit by pushing it to the deploy/staging branch:
+#   git push origin <commit>:refs/heads/deploy/staging --force-with-lease
+# or, once this file is on master, run it by hand from the Actions tab.
+# Production is never touched: the role can only update the staging function.
+name: Deploy staging
+
+on:
+  push:
+    branches: [deploy/staging]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPO: 227214487086.dkr.ecr.us-east-1.amazonaws.com/callismatic
+      FUNCTION_NAME: callismatic-staging-AppFunction-PtzRmGhxmEE2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Unit tests
+        run: uv run --quiet --extra whatsapp --extra google --with pytest --with httpx python -m pytest -q
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR_REPO%%/*}"
+
+      - name: Build and push image
+        run: |
+          SHORT="${GITHUB_SHA::7}"
+          docker build --provenance=false --sbom=false -t "$ECR_REPO:staging" -t "$ECR_REPO:staging-$SHORT" .
+          docker push "$ECR_REPO:staging-$SHORT"
+          docker push "$ECR_REPO:staging"
+
+      - name: Update staging function
+        run: |
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" --image-uri "$ECR_REPO:staging" --query LastUpdateStatus --output text
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+          aws lambda get-function --function-name "$FUNCTION_NAME" --query '{state:Configuration.State,status:Configuration.LastUpdateStatus,image:Code.ResolvedImageUri}'
