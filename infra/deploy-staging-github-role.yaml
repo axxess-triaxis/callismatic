@@ -5,9 +5,10 @@ Description: >-
   Reuses the account's existing GitHub OIDC provider.
 
 Parameters:
-  GitHubRepository:
+  GitHubSubjectRepository:
     Type: String
-    Default: axxess-triaxis/callismatic
+    Default: axxess-triaxis@298995581/callismatic@1368018032
+    Description: Repository as it appears in the OIDC sub claim (see repos/{repo}/actions/oidc/customization/sub)
   EcrRepositoryName:
     Type: String
     Default: callismatic
@@ -32,7 +33,8 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepository}:environment:staging
+                # GitHub's immutable subject format (owner@id/repo@id), used by this repo.
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubSubjectRepository}:environment:staging
       Policies:
         - PolicyName: deploy-staging
           PolicyDocument:
