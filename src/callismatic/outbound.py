@@ -16,6 +16,13 @@ Off unless OUTBOUND_AGENT_CALLS_ENABLED=true. The fake provider runs only on sta
 (CALLISMATIC_STAGE=staging and OUTBOUND_FAKE_PROVIDER=true), never in production.
 
 The event never carries the transcript or the phone number; the transcript stays here.
+
+Customer calls (stack org routing, 2026-11-20). One shared deployment places calls for every AXXESS
+organization. A call is a customer call when it carries a caller_id, or when its organization is not
+Triaxis's own (TRIAXIS_ORGANIZATION_ID). A customer call must come with the organization's own caller ID,
+its name and the purpose of the call. It is placed from that caller ID (never a Triaxis number, see
+TRIAXIS_CALLER_IDS), introduces the agent as calling for that organization, and never offers slots from
+the Triaxis founder's calendar. Its result goes back with job_id, and STILL files it in that organization.
 """
 
 from __future__ import annotations
@@ -31,7 +38,8 @@ from pydantic import BaseModel, Field
 from callismatic.still_emit import emit
 
 JsonObject = dict[str, Any]
-Provider = Callable[[str, str], JsonObject]
+# provider(task, phone_number) for Triaxis calls; provider(task, phone_number, caller_id=...) for customer calls.
+Provider = Callable[..., JsonObject]
 
 SOURCE = "triaxis.callismatic"
 EVENT_TYPE = "call.completed.v1"
@@ -59,10 +67,39 @@ class OutboundCallRequest(BaseModel):
     title: str = Field(max_length=200)
     contact_name: str | None = Field(default=None, max_length=120)
     company: str | None = Field(default=None, max_length=200)
+    # Customer calls only (2026-11-20): the organization's own number, name and reason for calling.
+    caller_id: str | None = Field(default=None, pattern=r"^\+[1-9]\d{6,14}$")
+    organization_name: str | None = Field(default=None, min_length=1, max_length=120)
+    call_purpose: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 class ProviderUnavailable(RuntimeError):
     """No provider may place a lead call to this destination."""
+
+
+class CallRefused(ValueError):
+    """A customer call that is missing its own identity, or would go out as Triaxis."""
+
+
+def _numbers(value: str) -> set[str]:
+    return {part.strip() for part in value.split(",") if part.strip()}
+
+
+def is_customer_call(request: OutboundCallRequest) -> bool:
+    triaxis_org = os.environ.get("TRIAXIS_ORGANIZATION_ID", "").strip().lower()
+    return bool(request.caller_id) or (bool(triaxis_org) and request.organization_id.lower() != triaxis_org)
+
+
+def check_customer_call(request: OutboundCallRequest) -> None:
+    """Raises CallRefused unless a customer call carries the organization's own identity."""
+    if not is_customer_call(request):
+        return
+    if not request.caller_id:
+        raise CallRefused("caller_id_required")
+    if request.caller_id in _numbers(os.environ.get("TRIAXIS_CALLER_IDS", "")):
+        raise CallRefused("triaxis_caller_id")
+    if not request.organization_name or not request.call_purpose:
+        raise CallRefused("organization_details_required")
 
 
 class CallReport(BaseModel):
@@ -86,7 +123,7 @@ def _fake_allowed() -> bool:
     return os.environ.get(FAKE_ENV, "").strip().lower() == "true" and os.environ.get("CALLISMATIC_STAGE") == "staging"
 
 
-def fake_provider(task: str, phone_number: str) -> JsonObject:
+def fake_provider(task: str, phone_number: str, caller_id: str | None = None) -> JsonObject:
     """Staging only: a scripted conversation, so the pipeline can run end to end without a call."""
     return {
         "status": "COMPLETED",
@@ -130,6 +167,16 @@ def build_task(request: OutboundCallRequest, slots: list[tuple[datetime, datetim
     zone = ZoneInfo(TIME_ZONES[request.country])
     who = request.contact_name or "the person who answers"
     company = f" at {request.company}" if request.company else ""
+    if is_customer_call(request):
+        return "\n".join([
+            f"Call {who}{company}.",
+            f"First, say plainly that you are an AI assistant calling on behalf of {request.organization_name}, "
+            "and ask whether now is a good time. If not, ask when to call back and end the call politely.",
+            "If they ask not to be called again, confirm that they will not be called again, and end the call.",
+            f"Purpose of the call, as given by {request.organization_name}: {request.call_purpose}",
+            "Do not quote prices, make commitments, book appointments, or state facts you were not told. "
+            f"If they ask something you cannot answer, say {request.organization_name} will follow up.",
+        ])
     lines = [
         f"Call {who}{company}.",
         "First, say plainly that you are an AI assistant calling on behalf of Triaxis Ventures about AXXESS TRIaxis, "
@@ -190,10 +237,13 @@ def run_outbound_job(
         "failure_reason": None,
     }
     try:
+        check_customer_call(request)
         place = provider or provider_for(request.phone_e164)
-        slots = slots_fn(request.country)
+        customer = is_customer_call(request)
+        # The demo slots come from the Triaxis founder's calendar: never offered on a customer's call.
+        slots = [] if customer else slots_fn(request.country)
         task = build_task(request, slots)
-        result = place(task, request.phone_e164)
+        result = place(task, request.phone_e164, caller_id=request.caller_id) if customer else place(task, request.phone_e164)
         turns = result.get("transcript_turns") or []
         report = classify(task, turns, slots) if turns else CallReport(outcome="no_answer", summary="")
         accepted = next(
@@ -212,6 +262,8 @@ def run_outbound_job(
         )
     except ProviderUnavailable:
         data["failure_reason"] = "provider_unavailable"
+    except CallRefused as exc:
+        data["failure_reason"] = str(exc)
     except Exception:  # noqa: BLE001 -- the job must always report back, never vanish
         data["failure_reason"] = "call_error"
     emit_fn(SOURCE, EVENT_TYPE, data, key=request.job_id, subject=request.lead_id)
