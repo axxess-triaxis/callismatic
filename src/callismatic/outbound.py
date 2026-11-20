@@ -59,6 +59,9 @@ class OutboundCallRequest(BaseModel):
     title: str = Field(max_length=200)
     contact_name: str | None = Field(default=None, max_length=120)
     company: str | None = Field(default=None, max_length=200)
+    # Automation plan Phase 2 (2026-11-16): a short brief of the lead's AXXESS history (earlier calls,
+    # replies, meetings, conversations), so the agent does not ask again what the contact already said.
+    context: str | None = Field(default=None, max_length=1500)
 
 
 class ProviderUnavailable(RuntimeError):
@@ -139,6 +142,11 @@ def build_task(request: OutboundCallRequest, slots: list[tuple[datetime, datetim
         "Do not quote prices, make commitments, or describe features you were not told about. "
         "If they ask something you cannot answer, say the team will follow up by email.",
     ]
+    if request.context and request.context.strip():
+        lines.append(
+            "Background from our records, for you only: use it so you do not ask again what they already told us. "
+            "Do not read it out, and if they say something different, believe them:\n" + request.context.strip()
+        )
     if slots:
         times = "; ".join(start.astimezone(zone).strftime("%A %d %B at %I:%M %p") for start, _ in slots)
         lines.append(f"If they want a demo, offer these times ({TIME_ZONES[request.country]} time): {times}. Confirm exactly one.")

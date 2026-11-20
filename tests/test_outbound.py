@@ -183,3 +183,23 @@ def test_on_lambda_the_job_is_an_async_self_invoke(monkeypatch):
     assert kwargs["FunctionName"] == "callismatic"
     assert kwargs["InvocationType"] == "Event"
     assert json.loads(kwargs["Payload"])["callismatic_outbound_job"]["job_id"] == JOB
+
+
+# --- lead context from AXXESS (automation plan Phase 2, 2026-11-16) ------------------------------
+
+
+def test_the_lead_brief_is_background_only_and_optional():
+    brief = "2026-11-12 email reply (interested): Pricing for 10 seats\n2026-11-14 meeting booked: Demo Tue"
+    task = build_task(_request(context=brief), [SLOT])
+    assert "Background from our records, for you only" in task
+    assert "Do not read it out" in task and "believe them" in task
+    assert "Demo Tue" in task
+    # The founder-approved opening and opt-out lines are unchanged and still come first.
+    assert task.index("you are an AI assistant calling on behalf of Triaxis Ventures") < task.index("Background from our records")
+    assert "Background" not in build_task(_request(), [SLOT])
+    assert "Background" not in build_task(_request(context="   "), [SLOT])
+
+
+def test_an_overlong_brief_is_refused_at_the_api():
+    response = _post({**BODY, "context": "x" * 1501})
+    assert response.status_code == 422
