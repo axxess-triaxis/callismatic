@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  GitHub Actions role that builds the Callismatic image and deploys it to the staging
+  Lambda only. Assumable only by jobs in the staging environment of the Callismatic repo.
+  Reuses the account's existing GitHub OIDC provider.
+
+Parameters:
+  GitHubSubjectRepository:
+    Type: String
+    Default: axxess-triaxis@298995581/callismatic@1368018032
+    Description: Repository as it appears in the OIDC sub claim (see repos/{repo}/actions/oidc/customization/sub)
+  EcrRepositoryName:
+    Type: String
+    Default: callismatic
+  StagingFunctionName:
+    Type: String
+    Default: callismatic-staging-AppFunction-PtzRmGhxmEE2
+
+Resources:
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: callismatic-deploy-staging-github
+      Description: Callismatic staging deploy from GitHub Actions - ECR push and staging Lambda update only
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # GitHub's immutable subject format (owner@id/repo@id), used by this repo.
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubSubjectRepository}:environment:staging
+      Policies:
+        - PolicyName: deploy-staging
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: EcrPush
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${EcrRepositoryName}
+              - Sid: UpdateStagingFunctionOnly
+                Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StagingFunctionName}
+
+Outputs:
+  RoleArn:
+    Value: !GetAtt DeployRole.Arn
