@@ -862,8 +862,9 @@ call:
 - reports `call.completed.v1` with its `job_id`, which STILL files in that organization through
   AXXESS `/api/stack/results`.
 
-Triaxis's own calls are unchanged. The customer-call script in `outbound.build_task` is new wording and
-needs the founder's approval before customer calls are switched on. Outbound calls write nothing to the
+Triaxis's own calls are unchanged. The founder approved the customer-call script in `outbound.build_task`
+on 2026-11-20 ("Approve and merge", on PR #21). Any change to its wording needs a fresh approval, and
+the AI-disclosure wording still needs counsel's sign-off. Outbound calls write nothing to the
 digest, blocklist or corrections stores, so no store holds one organization's call data for another.
 
 ### Publishing to STILL (switched on in production 2026-10-29)
