@@ -183,3 +183,94 @@ def test_on_lambda_the_job_is_an_async_self_invoke(monkeypatch):
     assert kwargs["FunctionName"] == "callismatic"
     assert kwargs["InvocationType"] == "Event"
     assert json.loads(kwargs["Payload"])["callismatic_outbound_job"]["job_id"] == JOB
+
+
+# --- customer calls (stack org routing, 2026-11-20) ---------------------------------------------
+
+TRIAXIS_ORG = "99999999-8888-7777-6666-555555555555"
+CUSTOMER = {"caller_id": "+919800000001", "organization_name": "Sharma Realty",
+            "call_purpose": "Ask whether they still want to view the 2BHK flat they enquired about."}
+
+
+@pytest.fixture
+def triaxis_org(monkeypatch):
+    monkeypatch.setenv("TRIAXIS_ORGANIZATION_ID", TRIAXIS_ORG)
+    monkeypatch.setenv("TRIAXIS_CALLER_IDS", "+61400000001, +919000000000")
+
+
+def _customer_run(request, slots_fn=None):
+    calls, emitted = [], []
+
+    def place(task, phone, **kw):
+        calls.append((task, phone, kw))
+        return {"transcript_turns": [{"speaker": "contact", "text": "yes"}]}
+
+    data = run_outbound_job(
+        request, provider=place,
+        classify=MagicMock(return_value=CallReport(outcome="interested", summary="Wants a viewing.",
+                                                   accepted_slot_start=SLOT[0].isoformat())),
+        slots_fn=slots_fn or MagicMock(return_value=[SLOT]),
+        emit_fn=lambda source, event_type, data, **kw: emitted.append(data),
+    )
+    return data, calls, emitted
+
+
+def test_a_customer_call_goes_out_from_its_own_caller_id_as_that_organization(triaxis_org):
+    slots = MagicMock(return_value=[SLOT])
+    data, [(task, phone, kw)], [event] = _customer_run(_request(**CUSTOMER), slots_fn=slots)
+    assert kw == {"caller_id": "+919800000001"}
+    assert "on behalf of Sharma Realty" in task and "2BHK" in task
+    assert "Triaxis" not in task and "AXXESS" not in task
+    slots.assert_not_called()
+    assert data["accepted_slot"] is None, "the Triaxis founder's calendar is never offered to a customer's lead"
+    assert event["job_id"] == JOB and event["organization_id"] == ORG
+
+
+def test_a_triaxis_call_is_unchanged(triaxis_org):
+    calls = []
+    run_outbound_job(_request(organization_id=TRIAXIS_ORG),
+                     provider=lambda task, phone: calls.append(task) or {"transcript_turns": []},
+                     slots_fn=lambda c: [SLOT], emit_fn=lambda *a, **k: None)
+    assert "on behalf of Triaxis Ventures" in calls[0]
+
+
+@pytest.mark.parametrize("over, reason", [
+    ({}, "caller_id_required"),
+    ({**CUSTOMER, "caller_id": "+919000000000"}, "triaxis_caller_id"),
+    ({**CUSTOMER, "organization_name": None}, "organization_details_required"),
+    ({**CUSTOMER, "call_purpose": None}, "organization_details_required"),
+])
+def test_a_customer_call_without_its_own_identity_is_refused_and_reported(triaxis_org, over, reason):
+    data, calls, emitted = _customer_run(_request(**over))
+    assert calls == [], "no call is placed"
+    assert (data["status"], data["failure_reason"]) == ("failed", reason)
+    assert emitted, "AXXESS still hears back"
+
+
+def test_a_caller_id_marks_a_customer_call_even_without_the_triaxis_org_setting():
+    data, calls, _ = _customer_run(_request(caller_id="+919800000001"))
+    assert calls == [] and data["failure_reason"] == "organization_details_required"
+
+
+def test_the_endpoint_refuses_a_customer_call_without_its_caller_id(monkeypatch, triaxis_org):
+    monkeypatch.setenv("OUTBOUND_AGENT_CALLS_ENABLED", "true")
+    dispatched = MagicMock()
+    monkeypatch.setattr(web, "dispatch_outbound_job", dispatched)
+    response = _post()
+    assert (response.status_code, response.json()) == (422, {"error": "caller_id_required"})
+    dispatched.assert_not_called()
+
+
+def test_the_endpoint_accepts_a_complete_customer_call_on_staging(monkeypatch, triaxis_org):
+    for name, value in {"OUTBOUND_AGENT_CALLS_ENABLED": "true", "OUTBOUND_FAKE_PROVIDER": "true",
+                        "CALLISMATIC_STAGE": "staging"}.items():
+        monkeypatch.setenv(name, value)
+    dispatched = MagicMock()
+    monkeypatch.setattr(web, "dispatch_outbound_job", dispatched)
+    assert _post({**BODY, **CUSTOMER}).status_code == 202
+    assert dispatched.call_args.args[0].caller_id == "+919800000001"
+
+
+def test_a_malformed_caller_id_is_rejected(monkeypatch):
+    monkeypatch.setenv("OUTBOUND_AGENT_CALLS_ENABLED", "true")
+    assert _post({**BODY, **CUSTOMER, "caller_id": "98000"}).status_code == 422

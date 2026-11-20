@@ -847,6 +847,26 @@ Production status (2026-11-14):
   Any change to its wording needs a fresh approval. The AI-disclosure wording still needs counsel's
   sign-off, since India's rules for AI voice calls are reported as draft.
 
+#### Customer calls (built 2026-11-20, off)
+
+One shared deployment places calls for every AXXESS organization. A call is a **customer call** when
+the job carries a `caller_id`, or when its `organization_id` is not `TRIAXIS_ORGANIZATION_ID`. A customer
+call:
+- must carry the organization's own `caller_id` (E.164), `organization_name` and `call_purpose`;
+  otherwise it is refused (`caller_id_required`, `organization_details_required`). The endpoint answers
+  422, and a job that reaches the worker reports the reason back as a failed call;
+- is never placed from a Triaxis number (`TRIAXIS_CALLER_IDS`; refused as `triaxis_caller_id`);
+- goes to the provider as `provider(task, phone, caller_id=...)`, so the customer's number is shown;
+- says the agent is calling for that organization, states the organization's purpose, and never
+  offers demo slots, because those come from the Triaxis founder's calendar;
+- reports `call.completed.v1` with its `job_id`, which STILL files in that organization through
+  AXXESS `/api/stack/results`.
+
+Triaxis's own calls are unchanged. The founder approved the customer-call script in `outbound.build_task`
+on 2026-11-20 ("Approve and merge", on PR #21). Any change to its wording needs a fresh approval, and
+the AI-disclosure wording still needs counsel's sign-off. Outbound calls write nothing to the
+digest, blocklist or corrections stores, so no store holds one organization's call data for another.
+
 ### Publishing to STILL (switched on in production 2026-10-29)
 
 STILL is Triaxis Ventures' cross-product event bus (EventBridge `still`, ap-southeast-2). After

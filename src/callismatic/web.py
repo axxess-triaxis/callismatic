@@ -38,7 +38,15 @@ from callismatic.corrections import record_correction
 from callismatic.digest_report import BLOCKLIST_PATH, DIGEST_PATH, generate_weekly_digest
 from callismatic.mcp_server import app as mcp_asgi_app
 from callismatic.mcp_server import mcp as mcp_server_instance
-from callismatic.outbound import OutboundCallRequest, ProviderUnavailable, dispatch_outbound_job, outbound_enabled, provider_for
+from callismatic.outbound import (
+    CallRefused,
+    OutboundCallRequest,
+    ProviderUnavailable,
+    check_customer_call,
+    dispatch_outbound_job,
+    outbound_enabled,
+    provider_for,
+)
 from callismatic.reminders import add_reminder, send_due_reminders
 from callismatic.todos import TODOS_PATH, complete_todo, list_todos
 from callismatic.tools import find_digest_entry, unblock_number
@@ -503,6 +511,10 @@ def api_outbound_calls(body: OutboundCallRequest, x_api_key: str | None = Header
     _require_admin(x_api_key)
     if not outbound_enabled():
         return JSONResponse(status_code=503, content={"error": "outbound_disabled"})
+    try:
+        check_customer_call(body)
+    except CallRefused as exc:
+        return JSONResponse(status_code=422, content={"error": str(exc)})
     try:
         provider_for(body.phone_e164)
     except ProviderUnavailable:
