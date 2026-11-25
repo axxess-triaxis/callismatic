@@ -913,4 +913,16 @@ from AWS credits: STILL is estimated at under USD 2 a month, Omnidamus keeps a R
 USD 0.50 a month, and Amazon Bedrock tokens are billed per use.
 
 <!-- readme-activity:start (generated; edits here are overwritten) -->
+## Recent changes
+
+<sub>Generated 2026-11-25 from this repository's history, last 14 days. Documentation, dependency and housekeeping changes are left out.</sub>
+
+| Date | Change |
+|---|---|
+| 2026-11-25 | [Weekly README refresh](https://github.com/axxess-triaxis/callismatic/pull/22) |
+| 2026-11-20 | [feat(outbound): customer calls from the organization's own caller ID](https://github.com/axxess-triaxis/callismatic/pull/21) |
+| 2026-11-20 | [fix(triage): a buyer is always labelled lead](https://github.com/axxess-triaxis/callismatic/pull/18) |
+| 2026-11-13 | [feat(outbound): agent calls requested from AXXESS (off, no provider)](https://github.com/axxess-triaxis/callismatic/pull/15) |
+| 2026-11-13 | [fix(web): the dashboard needs the read key](https://github.com/axxess-triaxis/callismatic/pull/14) |
+| 2026-11-13 | [fix(whatsapp): never place a phone callback from a WhatsApp message](https://github.com/axxess-triaxis/callismatic/pull/13) |
 <!-- readme-activity:end -->
