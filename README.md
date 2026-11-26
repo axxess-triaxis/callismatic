@@ -18,7 +18,7 @@ See [Part of the Triaxis stack](#part-of-the-triaxis-stack).
 
 | | State | Evidence |
 |---|---|---|
-| Production app | **Live** on AWS Lambda (us-east-1) behind a Function URL | `/api/digest` returned 200 on 2026-10-29; see [Deployment](#deployment) |
+| Production app | **Live** on AWS Lambda (us-east-1) behind a Function URL; customer-call code deployed 2026-11-26, calls off | `/api/digest` returned 200 on 2026-10-29; it now needs an API key and answered 401 without one on 2026-11-26. See [Deployment](#deployment) |
 | STILL publishing | **Live and verified end to end 2026-10-29**: Lambda redeployed 12:22 UTC with `STILL_EVENT_BUS_ARN` set; two synthetic leads sent through live `/api/triage/text` became AXXESS tasks `fa971d9e` and `556eb2bb` | Code in [PR #8](https://github.com/axxess-triaxis/callismatic/pull/8) (merged as ae4ddcb); run recorded in [STILL#1](https://github.com/axxess-triaxis/STILL/pull/1); STILL's idempotency records for both events read COMPLETED with those task ids |
 | Tests | **141 passed** | [PR #8](https://github.com/axxess-triaxis/callismatic/pull/8) (135 before, plus 6 STILL tests) |
 | Earlier production fix | `aws login` sessions readable, tests isolated from the real AWS config | [PR #7](https://github.com/axxess-triaxis/callismatic/pull/7), deployed 2026-10-27 |
@@ -861,6 +861,21 @@ call:
   offers demo slots, because those come from the Triaxis founder's calendar;
 - reports `call.completed.v1` with its `job_id`, which STILL files in that organization through
   AXXESS `/api/stack/results`.
+
+Production status (2026-11-26): deployed, still off.
+- Founder go: "Yes, go" (2026-11-26). Staging first: `master` `b65fd7e` merged into `deploy/staging` as
+  `0b25f6f` (same files as `master`); the workflow ran 197 unit tests (all passed) and set the staging
+  function to `sha256:e281871e...` at 04:29 UTC. The AXXESS stack test then passed 7 of 7 against it
+  (AXXESSTRIAXIS run 45755553018, 04:29 to 04:40 UTC).
+- Production `callismatic` was moved to that same digest, not a rebuild, at 04:45:08 UTC: Active,
+  update successful. Roll back to `sha256:941f7458...` (`72d6b82`, 2026-11-20).
+- Live check, 04:45 to 04:56 UTC: no-key `/api/digest`, `/` and `/api/todos` answered 401, `GET /webhook`
+  403 and an empty `POST /api/outbound-calls` 422, the same as before the switch. CloudWatch showed 0
+  errors in 8 requests. The first cold start hit Lambda's 10 second init limit (9999.66 ms), as the
+  old image did on 2026-11-14 and 2026-11-20.
+- Not set yet: `TRIAXIS_ORGANIZATION_ID` and `TRIAXIS_CALLER_IDS` on the function (founder step), and
+  `OUTBOUND_AGENT_CALLS_ENABLED`. No call can be placed: no provider route is registered, and DLT, TDRA
+  and counsel sign-off are not recorded.
 
 Triaxis's own calls are unchanged. The founder approved the customer-call script in `outbound.build_task`
 on 2026-11-20 ("Approve and merge", on PR #21). Any change to its wording needs a fresh approval, and
