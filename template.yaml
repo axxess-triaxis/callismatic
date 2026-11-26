@@ -25,6 +25,14 @@ Parameters:
     Type: String
     Default: amazon.nova-lite-v1:0
     Description: Model used for triage, called through its us. inference profile
+  TriaxisOrganizationId:
+    Type: String
+    Default: ""
+    Description: AXXESS organization id of Triaxis itself. Calls for any other organization must carry that organization's own caller ID, name and call purpose. Empty = only calls with a caller_id are treated as customer calls.
+  TriaxisCallerIds:
+    Type: String
+    Default: ""
+    Description: Comma-separated E.164 numbers that belong to Triaxis. A customer call can never go out from them.
   AlarmEmail:
     Type: String
     Default: ""
@@ -69,6 +77,8 @@ Resources:
           BEDROCK_REGION: !Ref AWS::Region
           BEDROCK_MODEL_ID: !Sub us.${BedrockFoundationModelId}
           STILL_EVENT_BUS_ARN: !Ref StillEventBusArn
+          TRIAXIS_ORGANIZATION_ID: !Ref TriaxisOrganizationId
+          TRIAXIS_CALLER_IDS: !Ref TriaxisCallerIds
           # Staging only: outbound jobs run against the scripted fake provider; no call is placed.
           OUTBOUND_AGENT_CALLS_ENABLED: "true"
           OUTBOUND_FAKE_PROVIDER: "true"
